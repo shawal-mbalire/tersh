@@ -1,0 +1,4 @@
+dist
+target
+src-tauri/gen
+package-lock.json

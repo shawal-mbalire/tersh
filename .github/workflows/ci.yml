@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx prettier --check .
+      # Core, tersh-show and the Neovim-in-a-PTY test (the Tauri crate needs WebKitGTK; see release.yml).
+      - run: cargo test
+      - run: nvim --headless -u NONE -l editors/nvim/tests/run.lua

@@ -1,0 +1,98 @@
+name: Release
+
+# Push a tag like v0.1.0 to build and publish the app and tersh-show for every
+# platform. install.sh downloads these assets.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      id: ${{ steps.release.outputs.id }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "tersh $GITHUB_REF_NAME" --generate-notes
+          echo "id=$(gh release view "$GITHUB_REF_NAME" --json databaseId -q .databaseId)" >> "$GITHUB_OUTPUT"
+
+  app:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            args: ""
+          - os: ubuntu-22.04-arm
+            args: ""
+          - os: macos-latest
+            args: --target aarch64-apple-darwin
+          - os: macos-latest
+            args: --target x86_64-apple-darwin
+          - os: windows-latest
+            args: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux dependencies
+        if: startsWith(matrix.os, 'ubuntu')
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ startsWith(matrix.os, 'macos') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.id }}
+          args: ${{ matrix.args }}
+
+  cli:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, name: linux-x86_64 }
+          - { os: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu, name: linux-aarch64 }
+          - { os: macos-latest, target: aarch64-apple-darwin, name: macos-aarch64 }
+          - { os: macos-latest, target: x86_64-apple-darwin, name: macos-x86_64 }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, name: windows-x86_64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release -p tersh-show --target ${{ matrix.target }}
+      - name: Package and upload
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          dir=target/${{ matrix.target }}/release
+          if [ "${{ runner.os }}" = Windows ]; then
+            asset=tersh-show-${{ matrix.name }}.zip
+            (cd "$dir" && 7z a "$GITHUB_WORKSPACE/$asset" tersh-show.exe)
+          else
+            asset=tersh-show-${{ matrix.name }}.tar.gz
+            tar -czf "$asset" -C "$dir" tersh-show
+          fi
+          gh release upload "$GITHUB_REF_NAME" "$asset" --clobber

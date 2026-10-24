@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>tersh</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="drag" data-tauri-drag-region></div>
+    <div id="terminal">
+      <canvas id="grid"></canvas>
+      <div id="selection"></div>
+      <div id="cursor"></div>
+      <div id="cards"></div>
+      <textarea
+        id="input"
+        autocapitalize="off"
+        autocomplete="off"
+        autocorrect="off"
+        spellcheck="false"
+        aria-label="Terminal input"
+      ></textarea>
+    </div>
+    <div id="toasts"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
