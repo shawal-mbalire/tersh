@@ -27,3 +27,24 @@ jobs:
       # Core, tersh-show and the Neovim-in-a-PTY test (the Tauri crate needs WebKitGTK; see release.yml).
       - run: cargo test
       - run: nvim --headless -u NONE -l editors/nvim/tests/run.lua
+
+  desktop:
+    # The Tauri crate (CLI, updates, window) needs WebKitGTK to build.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci && npm run build
+      - run: cargo clippy -p tersh --all-targets -- -D warnings
+      - run: cargo test -p tersh

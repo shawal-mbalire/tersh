@@ -33,6 +33,25 @@ curl -fsSL https://raw.githubusercontent.com/shawal-mbalire/tersh/main/install.s
 On Windows, download the `.msi` from
 [Releases](https://github.com/shawal-mbalire/tersh/releases).
 
+### Updating
+
+```sh
+tersh update            # install the latest release
+tersh update --check    # only check
+```
+
+Open tersh windows notice the new version and restart into it, keeping the
+same directory and window size:
+
+- **Shell idle at its prompt:** restarts straight away.
+- **tmux or zellij running:** restarts straight away and re-attaches, since
+  your sessions keep running.
+- **Anything else running (an editor, a build):** waits until the shell is
+  idle again, with a notification. The `restart` action
+  (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>F5</kbd>) restarts immediately.
+
+Set `[update] auto_restart = false` to only be notified.
+
 ## Building from source
 
 ```sh
@@ -47,17 +66,38 @@ Install `tersh-show` with `cargo install --path crates/tersh-show`.
 ## Configuration
 
 On first run tersh writes `~/.config/tersh/config.toml`, a fully commented
-template. You can also open it with <kbd>Ctrl</kbd>+<kbd>,</kbd>. Every key
-is optional, and saving the file restyles the open window in place. Mistakes
-such as a misspelled key, an unknown theme or a bad colour show up as a
+template listing every option. To see or edit it, press
+<kbd>Ctrl</kbd>+<kbd>,</kbd> in tersh (<kbd>Cmd</kbd>+<kbd>,</kbd> on macOS),
+or open it directly:
+
+```sh
+$EDITOR ~/.config/tersh/config.toml      # macOS: ~/Library/Application Support/tersh/config.toml
+```
+
+Every key is optional. Everything hot-reloads, so there's nothing to restart:
+saving `config.toml`, a theme, `style.css` or a plugin updates the open window
+in place, and installing or removing a font is picked up too. Mistakes such
+as a misspelled key, an unknown theme or a bad colour show up as a
 notification instead of being silently ignored.
+
+### Fonts
+
+tersh bundles two fonts:
+
+- **Sono:** the default text font.
+- **Symbols Nerd Font Mono** (Nerd Fonts 3.4): used only for icon codepoints.
+
+Nerd Font icons (Powerline, devicons, Material Design, codicons, ...) work
+with any `font.family`, whether or not you have a Nerd Font installed, and
+even if yours is an older v2 build that lacks the v3 icons. kitty does the
+same thing.
 
 ```toml
 shell = "/usr/bin/fish"
 theme = "tokyo-night"
 
 [font]
-family = "'JetBrains Mono', monospace"
+family = "'Sono Variable', monospace"           # Sono is bundled and the default
 size = 13
 
 [window]
@@ -86,9 +126,24 @@ Colours, font, padding, opacity, cursor and keybindings change live. `shell`,
 
 ### Themes
 
-Built-in themes: `tersh` (default), `tersh-light`, `catppuccin-mocha`,
-`catppuccin-latte`, `tokyo-night`, `gruvbox-dark`, `nord`, `dracula`,
-`one-dark`, `solarized-dark` and `rose-pine`.
+| Family      | Themes                                                                              |
+| ----------- | ----------------------------------------------------------------------------------- |
+| tersh       | `tersh` (default), `tersh-light`                                                    |
+| Catppuccin  | `catppuccin-mocha`, `catppuccin-macchiato`, `catppuccin-frappe`, `catppuccin-latte` |
+| Tokyo Night | `tokyo-night`, `tokyo-night-storm`, `tokyo-night-moon`, `tokyo-night-day`           |
+| Rosé Pine   | `rose-pine`, `rose-pine-moon`, `rose-pine-dawn`                                     |
+| Gruvbox     | `gruvbox-dark`, `gruvbox-light`                                                     |
+| Solarized   | `solarized-dark`, `solarized-light`                                                 |
+| GitHub      | `github-dark`, `github-light`                                                       |
+| Others      | `nord`, `dracula`, `one-dark`, `kanagawa`, `everforest-dark`                        |
+
+Names are forgiving: `tokyonight`, `TokyoNight` and `tokyo-night` are the same
+theme, and a family name such as `catppuccin`, `gruvbox` or `rosepine` picks
+its usual variant.
+
+```toml
+theme = "catppuccin-macchiato"
+```
 
 To adjust a theme, override some of its keys:
 
@@ -195,8 +250,14 @@ set -ga update-environment " TERSH_SOCKET"   # use the faster socket in new pane
 
 ## Development
 
+The code uses a hexagonal (ports and adapters) layout: a pure domain
+(`crates/tersh-domain`, `src/domain`), use cases and ports
+(`crates/tersh-app`, `src/ports`), and adapters for the PTY, emulator, socket,
+filesystem and Tauri (`crates/tersh-adapters`, `src/adapters`, `src-tauri`).
+See [docs/architecture.md](docs/architecture.md).
+
 ```sh
-npm test && npm run typecheck                          # frontend
-cargo test                                             # core, tersh-show, Neovim-in-a-PTY test
+npm test && npm run typecheck                          # frontend, including the layering check
+cargo test                                             # domain, use cases (with fakes), adapters, tersh-show
 nvim --headless -u NONE -l editors/nvim/tests/run.lua  # Neovim plugin
 ```

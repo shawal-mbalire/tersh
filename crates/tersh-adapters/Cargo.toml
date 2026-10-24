@@ -1,0 +1,16 @@
+[package]
+name = "tersh-adapters"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "tersh adapters: native PTY, alacritty emulation, rich socket, settings directory"
+
+[dependencies]
+tersh-app = { path = "../tersh-app" }
+tersh-domain = { path = "../tersh-domain" }
+alacritty_terminal = "0.26"
+anyhow = "1.0.104"
+dirs = "7.0.0"
+log = "0.4.34"
+portable-pty = "0.9"
+serde_json = "1.0.154"

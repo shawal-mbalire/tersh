@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { normalizeCombo } from "../plugins/api";
-import { applySettings, cssVariables, isLight, resolveKeybindings } from "../settings";
-import type { Config, Settings } from "../types";
+import { normalizeCombo, resolveKeybindings } from "../domain/keys";
+import { cssVariables, isLight } from "../domain/theme";
+import { applySettings } from "../ui/settings";
+import type { Config, Settings } from "../domain/types";
 
 const config = (overrides: Partial<Config> = {}): Config => ({
   shell: null,
@@ -23,6 +24,7 @@ const config = (overrides: Partial<Config> = {}): Config => ({
   keybindings: {},
   rich: { enabled: true, osc: true, html_network: false },
   plugins: { disabled: [] },
+  update: { auto_restart: true },
   warnings: [],
   ...overrides,
 });
@@ -42,7 +44,14 @@ describe("settings", () => {
   });
 
   it("applies variables and the user stylesheet, replacing it on reload", () => {
-    const settings: Settings = { config: config(), style: "#cursor { color: red }", config_path: "/c", themes: [] };
+    const settings: Settings = {
+      config: config(),
+      style: "#cursor { color: red }",
+      config_path: "/c",
+      themes: [],
+      plugins_revision: "1",
+      fonts_revision: "1",
+    };
     applySettings(settings);
     applySettings({ ...settings, style: "body { margin: 1px }" });
     const root = document.documentElement;

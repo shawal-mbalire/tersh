@@ -1,44 +1,25 @@
-//! User settings as the page sees them, and live reloading.
+//! Settings commands and live reloading.
 //!
-//! `config.toml`, `style.css` and `themes/*.toml` are polled for changes; on
-//! a change the config is reloaded, pushed to the running session (colours
-//! reported to programs, default cursor) and sent to the page as a
-//! `settings-changed` event, which restyles the terminal in place.
+//! The settings files, plugins and system font directories are polled for
+//! changes; on a change the config is reloaded, pushed to the running session
+//! (colours reported to programs, default cursor) and sent to the page as a
+//! `settings-changed` event. The page restyles itself, reloads plugins if
+//! their revision changed, and re-measures fonts if the font revision changed.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::thread;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
-use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
-use tersh_core::{theme, Config};
+use tersh_app::{ChangeDetector, Settings};
 
 use crate::{AppState, CmdResult};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
 
-#[derive(Debug, Clone, Serialize)]
-pub struct Settings {
-    pub config: Config,
-    /// Contents of `style.css`, if any.
-    pub style: Option<String>,
-    pub config_path: PathBuf,
-    /// Theme names that can be used in `theme = "..."`.
-    pub themes: Vec<String>,
-}
-
-fn settings(config: Config) -> Settings {
-    Settings {
-        config,
-        style: std::fs::read_to_string(Config::style_path()).ok(),
-        config_path: Config::path(),
-        themes: theme::available(&Config::themes_dir()),
-    }
-}
-
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> Settings {
-    settings(state.config.lock().unwrap().clone())
+    Settings::new(&*state.store, &*state.fonts, state.config.lock().unwrap().clone())
 }
 
 /// Reload from disk now and return the result (the event is sent as well).
@@ -49,9 +30,9 @@ pub fn reload_config(app: AppHandle) -> Settings {
 
 /// Open `config.toml` with the system's handler for it, creating it first if needed.
 #[tauri::command]
-pub fn open_config() -> CmdResult<()> {
-    Config::ensure_file().map_err(|e| e.to_string())?;
-    open_path(&Config::path())
+pub fn open_config(state: State<'_, AppState>) -> CmdResult<()> {
+    state.store.ensure().map_err(|e| e.to_string())?;
+    open_path(&state.store.config_path())
 }
 
 fn open_path(path: &Path) -> CmdResult<()> {
@@ -73,46 +54,30 @@ fn open_path(path: &Path) -> CmdResult<()> {
 }
 
 fn reload(app: &AppHandle) -> Settings {
-    let config = Config::load();
+    let state = app.state::<AppState>();
+    let config = state.store.load();
     for warning in &config.warnings {
         log::warn!("config: {warning}");
     }
-    let state = app.state::<AppState>();
     if let Some(session) = state.session.lock().unwrap().as_ref() {
         session.reconfigure(&config);
     }
     *state.config.lock().unwrap() = config.clone();
-    let settings = settings(config);
+    let settings = Settings::new(&*state.store, &*state.fonts, config);
     if let Err(e) = app.emit("settings-changed", &settings) {
         log::warn!("settings-changed: {e}");
     }
     settings
 }
 
-/// Modification times of every file that affects the settings.
-fn fingerprint() -> Vec<(PathBuf, Option<SystemTime>)> {
-    let mut paths = vec![Config::path(), Config::style_path()];
-    if let Ok(entries) = std::fs::read_dir(Config::themes_dir()) {
-        paths.extend(entries.flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|e| e == "toml")));
-    }
-    paths.sort();
-    paths
-        .into_iter()
-        .map(|path| {
-            let modified = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
-            (path, modified)
-        })
-        .collect()
-}
-
 pub fn watch(app: AppHandle) {
     let spawned = thread::Builder::new().name("tersh-config-watch".into()).spawn(move || {
-        let mut last = fingerprint();
+        let state = app.state::<AppState>();
+        let (store, fonts) = (state.store.clone(), state.fonts.clone());
+        let mut changes = ChangeDetector::new(&*store, &*fonts);
         loop {
             thread::sleep(POLL_INTERVAL);
-            let current = fingerprint();
-            if current != last {
-                last = current;
+            if changes.changed(&*store, &*fonts) {
                 // Editors often write in several steps; let the file settle.
                 thread::sleep(Duration::from_millis(50));
                 reload(&app);

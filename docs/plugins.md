@@ -9,7 +9,11 @@ Put it in `~/.config/tersh/plugins/` as either:
 - `NAME.js`, or
 - `NAME/index.js`, with an optional `NAME/style.css` loaded alongside it.
 
-Plugins load in name order once the shell has started. Disable one without
+Plugins load in name order once the shell has started. They hot-reload: when
+a plugin file changes, every plugin is unloaded (each one's renderers,
+actions, keybindings, listeners and styles are undone, and the `Disposable`
+or function its `activate` returned is called) and the current versions are
+loaded. Disable one without
 deleting it with `[plugins] disabled = ["NAME"]` in `config.toml`.
 
 > Plugins have the same privileges as the terminal window, which includes

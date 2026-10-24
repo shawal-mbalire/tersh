@@ -6,14 +6,16 @@ license.workspace = true
 description = "A hyper-lightweight, extensible terminal with rich media cards"
 
 [lib]
-name = "tersh_app"
+name = "tersh_desktop"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tersh-core = { path = "../crates/tersh-core" }
+tersh-adapters = { path = "../crates/tersh-adapters" }
+tersh-app = { path = "../crates/tersh-app" }
+tersh-domain = { path = "../crates/tersh-domain" }
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-clipboard-manager = "2"
 serde = { version = "1", features = ["derive"] }

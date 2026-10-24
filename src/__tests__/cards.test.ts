@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { cardBox, CardManager, isExpired, type CardRenderer } from "../cards/manager";
-import type { Frame } from "../types";
+import { cardBox, isExpired } from "../domain/cards";
+import { CardManager, type CardRenderer } from "../ui/cards/manager";
+import type { Frame } from "../domain/types";
 
 const frame = (over: Partial<Frame> = {}): Frame => ({
   cols: 80,

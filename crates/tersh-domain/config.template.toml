@@ -1,0 +1,110 @@
+# tersh configuration
+#
+# Every setting is optional: uncomment and edit what you want to change.
+# tersh hot-reloads everything in this directory: save this file, a theme,
+# style.css or a plugin and the open window updates (installing a font is
+# picked up too). Colours, fonts, padding, opacity, cursor and keybindings
+# apply at once; `shell`, `args`, `env` and `scrollback` apply to new windows.
+#
+# Other files in this directory:
+#   style.css         CSS applied over the built-in styles (cards, cursor, ...)
+#   themes/NAME.toml  your own themes (same keys as [theme] below)
+#   plugins/          JavaScript plugins (NAME.js or NAME/index.js)
+
+# ---- shell -------------------------------------------------------------------
+
+# Program to run. Defaults to $SHELL.
+# shell = "/usr/bin/fish"
+# args = ["--login"]
+
+# Lines of history kept for the normal screen.
+# scrollback = 10000
+
+# Extra environment variables for the shell.
+# [env]
+# EDITOR = "nvim"
+
+# ---- appearance --------------------------------------------------------------
+
+# A theme name. Built in:
+#   tersh, tersh-light,
+#   catppuccin-mocha, catppuccin-macchiato, catppuccin-frappe, catppuccin-latte,
+#   tokyo-night, tokyo-night-storm, tokyo-night-moon, tokyo-night-day,
+#   rose-pine, rose-pine-moon, rose-pine-dawn,
+#   gruvbox-dark, gruvbox-light, solarized-dark, solarized-light,
+#   github-dark, github-light, nord, dracula, one-dark, kanagawa, everforest-dark
+# Names are forgiving ("tokyonight", "rosepine", "catppuccin" all work), and
+# the name of a file in themes/ works too.
+# theme = "tokyo-night"
+
+# Or start from a theme and override some of its colours:
+# [theme]
+# name = "nord"
+# background = "#20242c"
+# foreground = "#e5e9f0"
+# cursor = "#88c0d0"
+# selection = "#434c5e"
+# accent = "#88c0d0"           # links, focus and card highlights
+# palette = [                  # ANSI 0-15; a shorter list replaces the first entries
+#   "#3b4252", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#88c0d0", "#e5e9f0",
+#   "#4c566a", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#8fbcbb", "#eceff4",
+# ]
+
+# [font]
+# family = "'Sono Variable', monospace"   # any CSS font list. Sono is bundled, and
+#                                         # Nerd Font icons always work: tersh adds its own
+#                                         # symbols font as a fallback.
+# size = 14
+# line_height = 1.2
+# bold_is_bright = false       # draw bold ANSI 0-7 in their bright variants
+
+# [window]
+# padding = 10                 # pixels around the text
+# opacity = 0.92               # background opacity, 0.0 - 1.0
+# blur = true                  # blurred backdrop (macOS/Windows; on Linux your compositor decides)
+# width = 960                  # initial size
+# height = 600
+
+# [cursor]
+# shape = "block"              # block, beam or underline
+# blink = false
+
+# ---- keys --------------------------------------------------------------------
+
+# Bind key combos to actions, or to text sent to the shell. These are merged
+# over the defaults; bind a combo to "none" to give it back to programs.
+#
+# Actions: copy, paste, zoom_in, zoom_out, zoom_reset, scroll_page_up,
+# scroll_page_down, scroll_top, scroll_bottom, clear_cards, reload_config,
+# open_config, plus any a plugin registers.
+#
+# Defaults (cmd instead of ctrl+shift on macOS):
+#   ctrl+shift+c copy           ctrl+shift+v paste
+#   ctrl+= / ctrl+- / ctrl+0    zoom in / out / reset
+#   shift+pageup / pagedown     scroll history
+#   ctrl+shift+k clear_cards    ctrl+shift+r reload_config
+#   ctrl+,       open_config
+#
+# [keybindings]
+# "ctrl+shift+k" = "none"
+# "alt+left" = { send = "\u001bb" }     # word left in most shells
+# "ctrl+shift+g" = { send = "git status\r" }
+
+# ---- rich cards --------------------------------------------------------------
+
+# [rich]
+# enabled = true
+# osc = true                   # accept cards from program output (OSC 7701), not only $TERSH_SOCKET
+# html_network = false         # let HTML cards load scripts and images from the internet
+
+# [plugins]
+# disabled = ["some-plugin"]
+
+# ---- updates -----------------------------------------------------------------
+
+# `tersh update` installs the latest release. Running windows notice and
+# restart into it (same directory and size) once the shell is idle, or right
+# away if only tmux/zellij is running (they re-attach). Otherwise you get a
+# notification, and the `restart` action restarts immediately.
+# [update]
+# auto_restart = true

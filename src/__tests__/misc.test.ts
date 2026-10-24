@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { pickMime } from "../cards/renderers/notebook";
-import { ansiToHtml } from "../cards/renderers/ansi";
-import { imageSource, joinText } from "../cards/renderers/util";
-import { comboFromEvent, normalizeCombo } from "../plugins/api";
-import { Palette } from "../term/palette";
-import { RGB_FLAG } from "../types";
+import { pickMime } from "../ui/cards/renderers/notebook";
+import { ansiToHtml } from "../ui/cards/renderers/ansi";
+import { imageSource, joinText } from "../ui/cards/renderers/util";
+import { comboFromEvent, normalizeCombo } from "../domain/keys";
+import { Palette } from "../domain/palette";
+import { RGB_FLAG } from "../domain/types";
 
 describe("keybinding combos", () => {
   it("normalises modifier order and aliases", () => {

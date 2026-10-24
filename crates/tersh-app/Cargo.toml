@@ -1,0 +1,13 @@
+[package]
+name = "tersh-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "tersh application layer: terminal session and settings use cases, and their ports"
+
+[dependencies]
+tersh-domain = { path = "../tersh-domain" }
+anyhow = "1.0.104"
+log = "0.4.34"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"

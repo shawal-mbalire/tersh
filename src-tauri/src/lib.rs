@@ -1,16 +1,22 @@
-//! Tauri host: one window, one PTY session, a canvas grid and DOM card overlays.
+//! Desktop UI adapter and composition root: one Tauri window hosting a
+//! session (a canvas grid with DOM card overlays). It wires the native
+//! adapters from `tersh-adapters` into the `tersh-app` use cases and exposes
+//! them to the page as commands and channels.
 
 mod cards;
-mod plugins;
+mod cli;
 mod settings;
+mod updates;
 
 use std::sync::{Arc, Mutex};
 
 use serde_json::Value;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, State, WebviewUrl, WebviewWindowBuilder};
-use tersh_core::session::Info;
-use tersh_core::{Config, Frame, Session, SessionOptions, Sink, TermEvent};
+use tersh_adapters::{FsConfigStore, SystemFontDirs};
+use tersh_app::ports::{ConfigStore, Plugin, Watchable};
+use tersh_app::{Session, SessionOptions, Sink};
+use tersh_domain::{Config, Frame, Info, TermEvent};
 
 /// Forwards session output to whichever webview channels are current. The
 /// channels are swapped when the page reloads, while the shell keeps running.
@@ -46,10 +52,14 @@ impl Sink for ChannelSink {
 }
 
 struct AppState {
+    store: Arc<dyn ConfigStore>,
+    fonts: Arc<dyn Watchable>,
     /// The latest loaded config; replaced on reload.
     config: Mutex<Config>,
     sink: Arc<ChannelSink>,
     session: Mutex<Option<Session>>,
+    /// Where to start the shell and what to type into it (from the command line, e.g. after a restart).
+    launch: Mutex<cli::Launch>,
 }
 
 type CmdResult<T> = Result<T, String>;
@@ -69,8 +79,16 @@ fn session_start(
     match session.as_ref() {
         Some(existing) => existing.refresh(),
         None => {
-            let options = SessionOptions::from_config(&state.config.lock().unwrap(), cols, rows);
-            *session = Some(Session::spawn(options, state.sink.clone()).map_err(|e| format!("{e:#}"))?);
+            let config = state.config.lock().unwrap().clone();
+            let launch = std::mem::take(&mut *state.launch.lock().unwrap());
+            let mut options = SessionOptions::from_config(&config, cols, rows);
+            options.cwd = launch.cwd;
+            let spawned = tersh_adapters::spawn_local(options, config.rich.enabled, state.sink.clone());
+            let spawned = spawned.map_err(|e| format!("{e:#}"))?;
+            if let Some(input) = launch.input {
+                let _ = spawned.write(input.as_bytes());
+            }
+            *session = Some(spawned);
         },
     }
     Ok(session.as_ref().unwrap().info())
@@ -96,16 +114,47 @@ fn session_scroll(state: State<'_, AppState>, lines: i32) -> CmdResult<()> {
 }
 
 #[tauri::command]
+fn list_plugins(state: State<'_, AppState>) -> Vec<Plugin> {
+    let disabled = state.config.lock().unwrap().plugins.disabled.clone();
+    state.store.plugins(&disabled)
+}
+
+#[tauri::command]
 fn session_scroll_to_bottom(state: State<'_, AppState>) -> CmdResult<()> {
     with_session(&state, |s| s.scroll_to_bottom())
 }
 
-pub fn run() {
+/// Entry point: handle the command line, then run the app.
+pub fn main() {
+    let code = match cli::parse(std::env::args().skip(1)) {
+        Ok(cli::Command::Run(launch)) => {
+            run(launch);
+            0
+        },
+        Ok(cli::Command::Update { check }) => updates::cli(check),
+        Ok(cli::Command::Version) => {
+            println!("tersh {}", env!("CARGO_PKG_VERSION"));
+            0
+        },
+        Ok(cli::Command::Help) => {
+            print!("{}", cli::USAGE);
+            0
+        },
+        Err(e) => {
+            eprintln!("tersh: {e}\n\n{}", cli::USAGE);
+            2
+        },
+    };
+    std::process::exit(code);
+}
+
+pub fn run(launch: cli::Launch) {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
-    if let Err(e) = Config::ensure_file() {
-        log::warn!("could not create {}: {e}", Config::path().display());
+    let store: Arc<dyn ConfigStore> = Arc::new(FsConfigStore::user());
+    if let Err(e) = store.ensure() {
+        log::warn!("could not create {}: {e}", store.config_path().display());
     }
-    let config = Config::load();
+    let config = store.load();
     for warning in &config.warnings {
         log::warn!("config: {warning}");
     }
@@ -114,7 +163,14 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .register_uri_scheme_protocol(cards::SCHEME, cards::protocol)
         .manage(cards::CardStore::new(config.rich.html_network))
-        .manage(AppState { config: Mutex::new(config.clone()), sink: Arc::default(), session: Mutex::new(None) })
+        .manage(AppState {
+            store,
+            fonts: Arc::new(SystemFontDirs::new()),
+            config: Mutex::new(config.clone()),
+            sink: Arc::default(),
+            session: Mutex::new(None),
+            launch: Mutex::new(launch.clone()),
+        })
         .invoke_handler(tauri::generate_handler![
             settings::get_settings,
             settings::reload_config,
@@ -126,21 +182,24 @@ pub fn run() {
             session_scroll_to_bottom,
             cards::card_html_put,
             cards::card_html_drop,
-            plugins::list_plugins,
+            list_plugins,
+            updates::restart_app,
         ])
         .setup(move |app| {
-            create_window(app.handle(), &config)?;
+            create_window(app.handle(), &config, launch.size)?;
             settings::watch(app.handle().clone());
+            updates::watch(app.handle().clone());
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running tersh");
 }
 
-fn create_window(app: &AppHandle, config: &Config) -> tauri::Result<()> {
+fn create_window(app: &AppHandle, config: &Config, size: Option<(f64, f64)>) -> tauri::Result<()> {
+    let (width, height) = size.unwrap_or((config.window.width, config.window.height));
     let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
         .title("tersh")
-        .inner_size(config.window.width, config.window.height)
+        .inner_size(width, height)
         .min_inner_size(200.0, 100.0)
         .decorations(false)
         .transparent(true)

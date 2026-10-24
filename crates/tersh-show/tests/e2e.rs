@@ -5,7 +5,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde_json::Value;
-use tersh_core::{Config, Frame, Session, SessionOptions, Sink, TermEvent};
+use tersh_adapters::spawn_local;
+use tersh_app::{SessionOptions, Sink};
+use tersh_domain::{Config, Frame, TermEvent};
 
 #[derive(Default)]
 struct Recorder {
@@ -27,9 +29,8 @@ fn run_in_session(command: &str, use_socket: bool) -> (Value, u16) {
     let recorder = Arc::new(Recorder::default());
     let config = Config { shell: Some("/bin/sh".into()), ..Config::default() };
     let mut options = SessionOptions::from_config(&config, 60, 30);
-    options.socket_rich = use_socket;
     options.env.push(("PS1".into(), "$ ".into()));
-    let session = Session::spawn(options, recorder.clone()).unwrap();
+    let session = spawn_local(options, use_socket, recorder.clone()).unwrap();
 
     let dir = std::env::temp_dir().join(format!("tersh-show-e2e-{}-{use_socket}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

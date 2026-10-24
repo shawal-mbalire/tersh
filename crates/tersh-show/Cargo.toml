@@ -11,4 +11,6 @@ serde_json = "1"
 terminal_size = "0.4"
 
 [dev-dependencies]
-tersh-core = { path = "../tersh-core" }
+tersh-adapters = { path = "../tersh-adapters" }
+tersh-app = { path = "../tersh-app" }
+tersh-domain = { path = "../tersh-domain" }

@@ -1,11 +1,11 @@
 [workspace]
 resolver = "2"
-members = ["crates/tersh-core", "crates/tersh-show", "src-tauri"]
-default-members = ["crates/tersh-core", "crates/tersh-show"]
+members = ["crates/tersh-domain", "crates/tersh-app", "crates/tersh-adapters", "crates/tersh-show", "src-tauri"]
+default-members = ["crates/tersh-domain", "crates/tersh-app", "crates/tersh-adapters", "crates/tersh-show"]
 
 [workspace.package]
 edition = "2021"
-version = "0.1.0"
+version = "0.2.0"
 license = "MIT"
 
 [profile.release]

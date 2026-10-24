@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { encodeKey, encodeMouse, encodePaste, type KeyLike, type MouseReport } from "../term/input";
-import { Mode } from "../types";
+import { encodeKey, encodeMouse, encodePaste, type KeyLike, type MouseReport, normalizeTyped } from "../domain/input";
+import { Mode } from "../domain/types";
 
 const key = (k: string, mods: Partial<KeyLike> = {}): KeyLike => ({
   key: k,
@@ -84,5 +84,16 @@ describe("encodeMouse", () => {
     expect(encodeMouse({ ...base, action: "release", button: 2 }, Mode.MOUSE_REPORT_CLICK)).toBe(
       "\x1b[M" + String.fromCharCode(35, 37, 34),
     );
+  });
+});
+
+describe("normalizeTyped", () => {
+  it("turns a no-break space from the space bar into a space", () => {
+    expect(normalizeTyped("\u00a0", true)).toBe(" ");
+    expect(normalizeTyped("a\u00a0b", true)).toBe("a b");
+  });
+
+  it("keeps a deliberately typed no-break space", () => {
+    expect(normalizeTyped("\u00a0", false)).toBe("\u00a0");
   });
 });

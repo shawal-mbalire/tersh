@@ -3803,7 +3803,7 @@ dependencies = [
 
 [[package]]
 name = "tersh"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "env_logger",
  "log",
@@ -3812,20 +3812,43 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-clipboard-manager",
- "tersh-core",
+ "tersh-adapters",
+ "tersh-app",
+ "tersh-domain",
  "window-vibrancy",
 ]
 
 [[package]]
-name = "tersh-core"
-version = "0.1.0"
+name = "tersh-adapters"
+version = "0.2.0"
 dependencies = [
  "alacritty_terminal",
  "anyhow",
- "base64 0.23.1",
  "dirs",
  "log",
  "portable-pty",
+ "serde_json",
+ "tersh-app",
+ "tersh-domain",
+]
+
+[[package]]
+name = "tersh-app"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "log",
+ "serde",
+ "serde_json",
+ "tersh-domain",
+]
+
+[[package]]
+name = "tersh-domain"
+version = "0.2.0"
+dependencies = [
+ "base64 0.23.1",
+ "log",
  "serde",
  "serde_ignored",
  "serde_json",
@@ -3834,12 +3857,14 @@ dependencies = [
 
 [[package]]
 name = "tersh-show"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "base64 0.23.1",
  "serde_json",
  "terminal_size",
- "tersh-core",
+ "tersh-adapters",
+ "tersh-app",
+ "tersh-domain",
 ]
 
 [[package]]
