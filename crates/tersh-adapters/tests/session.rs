@@ -50,11 +50,16 @@ fn wait_for(what: &str, mut check: impl FnMut() -> bool) {
     }
 }
 
+/// Start `/bin/sh` and wait for its first prompt. Typing earlier races the
+/// shell: shells without a line editor (dash, Ubuntu's `/bin/sh`) print the
+/// prompt after the echoed input, so output lands on the prompt line.
 fn spawn(recorder: &Arc<Recorder>) -> Session {
-    let config = Config { shell: Some("/bin/sh".into()), ..Config::default() };
+    let config = Config { shell: Some(std::env::var("TERSH_TEST_SHELL").unwrap_or_else(|_| "/bin/sh".into())), ..Config::default() };
     let mut options = SessionOptions::from_config(&config, 40, 10);
     options.env.push(("PS1".into(), "$ ".into()));
-    spawn_local(options, true, recorder.clone()).expect("spawn shell")
+    let session = spawn_local(options, true, recorder.clone()).expect("spawn shell");
+    wait_for("prompt", || recorder.screen.lock().unwrap().iter().any(|l| l.starts_with('$')));
+    session
 }
 
 #[test]
