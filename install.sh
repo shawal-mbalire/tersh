@@ -116,18 +116,28 @@ if [ "$WITH_APP" = 1 ]; then
     rm -rf "$share/tersh/app.new" "$share/tersh/app.old"
     (cd "$tmp" && "$share/tersh/tersh.AppImage" --appimage-extract >/dev/null 2>&1) || true
     if [ -x "$tmp/squashfs-root/AppRun" ]; then
+      mkdir -p "$tmp/squashfs-root/share/themes/tersh/gtk-3.0"
+      cat >"$tmp/squashfs-root/share/themes/tersh/gtk-3.0/gtk.css" <<'GTKEOF'
+@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");
+window, window.background, window.csd, decoration {
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+}
+GTKEOF
+      if [ -f "$tmp/squashfs-root/apprun-hooks/linuxdeploy-plugin-gtk.sh" ]; then
+        sed -i 's/dbus-send/true/g; s/gsettings/true/g' "$tmp/squashfs-root/apprun-hooks/linuxdeploy-plugin-gtk.sh" 2>/dev/null || true
+      fi
       mv "$tmp/squashfs-root" "$share/tersh/app.new"
       [ -e "$share/tersh/app" ] && mv -f "$share/tersh/app" "$share/tersh/app.old"
       mv -f "$share/tersh/app.new" "$share/tersh/app"
       rm -rf "$share/tersh/app.old"
     fi
 
-    # WebKitGTK's DMABUF renderer silently crashes Tauri apps on Hyprland and
-    # some Wayland/Sway setups; disable it (falls back to a working path).
     cat >"$tmp/tersh-wrapper" <<EOF
 #!/bin/sh
-export WEBKIT_DISABLE_DMABUF_RENDERER=1
 export TERSH_WRAPPER="$BIN_DIR/tersh"
+export APPIMAGE_GTK_THEME="tersh"
 if [ -x "$share/tersh/app/AppRun" ]; then
   exec "$share/tersh/app/AppRun" "\$@"
 fi

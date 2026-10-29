@@ -11,12 +11,17 @@ const DIM_FG = 268;
 type Rgb = [number, number, number];
 
 export function parseHex(color: string): Rgb | null {
-  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
-  if (!m) return null;
-  let hex = m[1];
-  if (hex.length === 3) hex = [...hex].map((c) => c + c).join("");
-  const n = parseInt(hex, 16);
-  return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+  const s = color.trim();
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(s);
+  if (m) {
+    let hex = m[1];
+    if (hex.length === 3) hex = [...hex].map((c) => c + c).join("");
+    const n = parseInt(hex, 16);
+    return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+  }
+  const rgb = /^rgb\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i.exec(s);
+  if (rgb) return [Number(rgb[1]) & 0xff, Number(rgb[2]) & 0xff, Number(rgb[3]) & 0xff];
+  return null;
 }
 
 const css = ([r, g, b]: Rgb) => `rgb(${r},${g},${b})`;

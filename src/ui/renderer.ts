@@ -108,6 +108,10 @@ export class GridRenderer {
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.ctx.textBaseline = "alphabetic";
     this.currentFont = "";
+    if (this.bgAlpha > 0) {
+      this.ctx.fillStyle = this.fadeBackground(this.palette.resolve(BG));
+      this.ctx.fillRect(0, 0, width, height);
+    }
     this.lines.length = rows;
     for (let y = 0; y < rows; y++) {
       this.lines[y] ??= [];
@@ -202,15 +206,23 @@ export class GridRenderer {
     const ctx = this.ctx;
     const { cellWidth: cw, cellHeight: ch, baseline } = this.metrics;
     const top = y * ch;
-    ctx.clearRect(0, top, this.cols * cw, ch);
+    const rowWidth = this.cols * cw;
+    ctx.clearRect(0, top, rowWidth, ch);
+    if (this.bgAlpha > 0) {
+      ctx.fillStyle = this.fadeBackground(this.palette.resolve(BG));
+      ctx.fillRect(0, top, rowWidth, ch);
+    }
 
     for (const run of this.lines[y] ?? []) {
       const { fg, bg } = this.colors(run);
       const left = run.c * cw;
       const width = run.n * cw;
       if (bg) {
-        ctx.fillStyle = bg;
-        ctx.fillRect(left, top, width, ch);
+        if (this.bgAlpha < 1) ctx.clearRect(left, top, width, ch);
+        if (this.bgAlpha > 0) {
+          ctx.fillStyle = bg;
+          ctx.fillRect(left, top, width, ch);
+        }
       }
       if (run.f & CellFlag.HIDDEN) continue;
 

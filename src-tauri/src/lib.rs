@@ -133,11 +133,6 @@ fn session_scroll_to_bottom(state: State<'_, AppState>) -> CmdResult<()> {
 
 /// Entry point: handle the command line, then run the app.
 pub fn main() {
-    #[cfg(target_os = "linux")]
-    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
-        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-    }
-
     let code = match cli::parse(std::env::args().skip(1)) {
         Ok(cli::Command::Run(launch)) => {
             run(launch);
@@ -215,6 +210,7 @@ fn create_window(app: &AppHandle, config: &Config, size: Option<(f64, f64)>) -> 
         .min_inner_size(200.0, 100.0)
         .decorations(false)
         .transparent(true)
+        .background_color(tauri::window::Color(0, 0, 0, 0))
         .shadow(true)
         .build()?;
 

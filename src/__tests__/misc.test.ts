@@ -3,7 +3,7 @@ import { pickMime } from "../ui/cards/renderers/notebook";
 import { ansiToHtml } from "../ui/cards/renderers/ansi";
 import { imageSource, joinText } from "../ui/cards/renderers/util";
 import { comboFromEvent, normalizeCombo } from "../domain/keys";
-import { Palette } from "../domain/palette";
+import { Palette, parseHex } from "../domain/palette";
 import { RGB_FLAG } from "../domain/types";
 
 describe("keybinding combos", () => {
@@ -52,5 +52,12 @@ describe("palette", () => {
     expect(palette.resolve(16 + 36 * 5)).toBe("rgb(255,0,0)");
     expect(palette.resolve(232)).toBe("rgb(8,8,8)");
     expect(palette.resolve(256)).toBe("rgb(255,255,255)");
+  });
+
+  it("parses hex and rgb() strings for opacity fading", () => {
+    expect(parseHex("#0a0b0c")).toEqual([10, 11, 12]);
+    expect(parseHex("#abc")).toEqual([170, 187, 204]);
+    expect(parseHex("rgb(170,0,0)")).toEqual([170, 0, 0]);
+    expect(parseHex("rgb( 8 , 16 , 24 )")).toEqual([8, 16, 24]);
   });
 });

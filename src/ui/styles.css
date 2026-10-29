@@ -39,6 +39,7 @@ body {
   margin: 0;
   height: 100%;
   overflow: hidden;
+  border-radius: 8px;
   background: transparent;
   color: var(--fg);
   font-family: system-ui, sans-serif;
@@ -46,8 +47,7 @@ body {
 }
 
 body {
-  background: var(--bg);
-  border-radius: 8px;
+  background: transparent;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -69,8 +69,11 @@ body.fatal {
 #terminal {
   position: absolute;
   inset: var(--padding);
-  overflow: hidden;
   cursor: text;
+}
+
+#grid {
+  outline: 9999px solid var(--bg);
 }
 
 #grid,
