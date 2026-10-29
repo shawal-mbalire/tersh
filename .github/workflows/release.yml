@@ -20,7 +20,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --title "tersh $GITHUB_REF_NAME" --generate-notes
+          number="${GITHUB_REF_NAME#v}"
+          cp completions/tersh.yaml "tersh_completion_${number}.yaml"
+          gh release create "$GITHUB_REF_NAME" "tersh_completion_${number}.yaml" --title "tersh $GITHUB_REF_NAME" --generate-notes
           echo "id=$(gh release view "$GITHUB_REF_NAME" --json databaseId -q .databaseId)" >> "$GITHUB_OUTPUT"
 
   app:

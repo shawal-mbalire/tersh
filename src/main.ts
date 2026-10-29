@@ -23,8 +23,6 @@ async function main() {
   setCardDocuments(backend.cardDocuments);
   const settings = await backend.getSettings();
   applySettings(settings);
-  await loadFonts(settings.config.font);
-  await document.fonts.ready;
 
   const terminal = new Terminal(settings.config, backend, {
     terminal: byId("terminal"),
@@ -35,7 +33,11 @@ async function main() {
     input: byId<HTMLTextAreaElement>("input"),
     toasts: byId("toasts"),
   });
-  await terminal.start();
+  // Start the shell and load fonts concurrently so the shell initializes while
+  // WebKit finishes rasterising the bundled font faces.
+  const fontsReady = loadFonts(settings.config.font).then(() => document.fonts.ready);
+  await Promise.all([terminal.start(), fontsReady]);
+  terminal.refreshFonts();
   (window as unknown as { tersh: unknown }).tersh = terminal.api;
   reportWarnings(terminal, settings);
 

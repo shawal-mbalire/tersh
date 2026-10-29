@@ -22,7 +22,12 @@ pub fn default_shell() -> String {
 impl PtySystem for NativePty {
     fn spawn(&self, request: &SpawnRequest) -> Result<PtyProcess> {
         let pty = portable_pty::native_pty_system()
-            .openpty(PtySize { rows: request.rows, cols: request.cols, pixel_width: 0, pixel_height: 0 })
+            .openpty(PtySize {
+                rows: request.rows,
+                cols: request.cols,
+                pixel_width: request.cols * request.cell_width,
+                pixel_height: request.rows * request.cell_height,
+            })
             .context("opening pty")?;
 
         let program = request.shell.clone().unwrap_or_else(default_shell);

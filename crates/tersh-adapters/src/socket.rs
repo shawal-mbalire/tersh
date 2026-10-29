@@ -30,7 +30,7 @@ pub struct SocketServer {
 impl BoundSocket {
     /// Bind a private (mode 0600) socket in the runtime directory.
     pub fn bind() -> io::Result<Self> {
-        let dir = dirs::runtime_dir().unwrap_or_else(std::env::temp_dir);
+        let dir = dirs::runtime_dir().filter(|d| d.is_dir()).unwrap_or_else(std::env::temp_dir);
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         let path = dir.join(format!("tersh-{}-{id}.sock", std::process::id()));
         let _ = std::fs::remove_file(&path);

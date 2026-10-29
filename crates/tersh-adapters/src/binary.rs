@@ -16,7 +16,8 @@ pub struct AppBinary {
 
 impl AppBinary {
     pub fn current() -> Option<Self> {
-        let path = std::env::var_os("APPIMAGE")
+        let path = std::env::var_os("TERSH_WRAPPER")
+            .or_else(|| std::env::var_os("APPIMAGE"))
             .map(PathBuf::from)
             // Inside an AppImage the executable is a temporary extracted copy; the
             // installed AppImage is the file updates replace.

@@ -38,6 +38,8 @@ pub struct SpawnRequest {
     pub env: Vec<(String, String)>,
     pub cols: u16,
     pub rows: u16,
+    pub cell_width: u16,
+    pub cell_height: u16,
 }
 
 /// A process running in a pseudo-terminal.

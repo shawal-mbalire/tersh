@@ -10,14 +10,14 @@ import type { Frame, SessionInfo, Settings, TermEvent } from "../../domain/types
 import type { Backend, PluginSource, SessionHandlers } from "../../ports/backend";
 
 export class TauriBackend implements Backend {
-  startSession(cols: number, rows: number, handlers: SessionHandlers): Promise<SessionInfo> {
+  startSession(cols: number, rows: number, cellWidth: number, cellHeight: number, handlers: SessionHandlers): Promise<SessionInfo> {
     const frames = new Channel<Frame>();
     frames.onmessage = (frame) => handlers.frame(frame);
     const rich = new Channel<RichMessage>();
     rich.onmessage = (message) => handlers.rich(message);
     const events = new Channel<TermEvent>();
     events.onmessage = (event) => handlers.event(event);
-    return invoke<SessionInfo>("session_start", { cols, rows, frames, rich, events });
+    return invoke<SessionInfo>("session_start", { cols, rows, cellWidth, cellHeight, frames, rich, events });
   }
 
   write(data: string) {

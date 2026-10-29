@@ -62,6 +62,8 @@ fn nvim_line_card_follows_scrolling() {
     let config = Config { shell: Some("/bin/sh".into()), ..Config::default() };
     let mut options = SessionOptions::from_config(&config, 80, 24);
     options.env.push(("PS1".into(), "$ ".into()));
+    options.env.push(("XDG_STATE_HOME".into(), dir.display().to_string()));
+    options.env.push(("XDG_DATA_HOME".into(), dir.display().to_string()));
     let session = spawn_local(options, true, recorder.clone()).unwrap();
     session
         .write(format!("cd {} && exec nvim -u init.lua -i NONE file.txt\n", dir.display()).as_bytes())

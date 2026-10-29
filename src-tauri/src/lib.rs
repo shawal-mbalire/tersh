@@ -70,6 +70,8 @@ fn session_start(
     state: State<'_, AppState>,
     cols: u16,
     rows: u16,
+    cell_width: u16,
+    cell_height: u16,
     frames: Channel<Frame>,
     rich: Channel<Value>,
     events: Channel<TermEvent>,
@@ -77,13 +79,18 @@ fn session_start(
     *state.sink.channels.lock().unwrap() = Some(Channels { frames, rich, events });
     let mut session = state.session.lock().unwrap();
     match session.as_ref() {
-        Some(existing) => existing.refresh(),
+        Some(existing) => {
+            let _ = existing.resize(cols, rows, cell_width, cell_height);
+            existing.refresh();
+        },
         None => {
-            let config = state.config.lock().unwrap().clone();
+            let mut options = SessionOptions::from_config(&state.config.lock().unwrap(), cols, rows);
+            options.cell_width = cell_width;
+            options.cell_height = cell_height;
             let launch = std::mem::take(&mut *state.launch.lock().unwrap());
-            let mut options = SessionOptions::from_config(&config, cols, rows);
             options.cwd = launch.cwd;
-            let spawned = tersh_adapters::spawn_local(options, config.rich.enabled, state.sink.clone());
+            let rich_enabled = state.config.lock().unwrap().rich.enabled;
+            let spawned = tersh_adapters::spawn_local(options, rich_enabled, state.sink.clone());
             let spawned = spawned.map_err(|e| format!("{e:#}"))?;
             if let Some(input) = launch.input {
                 let _ = spawned.write(input.as_bytes());
@@ -126,6 +133,11 @@ fn session_scroll_to_bottom(state: State<'_, AppState>) -> CmdResult<()> {
 
 /// Entry point: handle the command line, then run the app.
 pub fn main() {
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
+
     let code = match cli::parse(std::env::args().skip(1)) {
         Ok(cli::Command::Run(launch)) => {
             run(launch);

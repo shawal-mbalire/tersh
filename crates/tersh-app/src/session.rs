@@ -26,9 +26,9 @@ use crate::ports::{
     SpawnRequest, TermHost,
 };
 
-/// Minimum time between frames. The first frame after a quiet period is sent
-/// immediately, so keystroke echo is not delayed.
-const FRAME_INTERVAL: Duration = Duration::from_millis(8);
+/// Minimum time between frames during heavy output (~240 Hz). The first frame
+/// after a quiet period is sent immediately, so keystroke echo is never delayed.
+const FRAME_INTERVAL: Duration = Duration::from_millis(4);
 
 /// Variables a new terminal must not inherit from whatever launched the app:
 /// it is not inside that tmux, nor inside another tersh.
@@ -44,6 +44,8 @@ pub struct SessionOptions {
     pub env: Vec<(String, String)>,
     pub cols: u16,
     pub rows: u16,
+    pub cell_width: u16,
+    pub cell_height: u16,
     pub scrollback: usize,
     /// Accept rich messages embedded in program output.
     pub osc_rich: bool,
@@ -62,6 +64,8 @@ impl SessionOptions {
             env: config.env.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
             cols,
             rows,
+            cell_width: 0,
+            cell_height: 0,
             scrollback: config.scrollback,
             osc_rich: config.rich.enabled && config.rich.osc,
             rich_socket: None,
@@ -172,6 +176,8 @@ impl Session {
             env,
             cols: options.cols,
             rows: options.rows,
+            cell_width: options.cell_width,
+            cell_height: options.cell_height,
         };
         let process = ports.pty.spawn(&request).context("starting the shell")?;
         log::debug!("started {}", process.program);
@@ -184,7 +190,12 @@ impl Session {
             input: Arc::new(Mutex::new(process.input)),
             sink,
             palette: Mutex::new(options.palette.clone()),
-            size: Mutex::new(WindowSize { cols: options.cols, rows: options.rows, cell_width: 0, cell_height: 0 }),
+            size: Mutex::new(WindowSize {
+                cols: options.cols,
+                rows: options.rows,
+                cell_width: options.cell_width,
+                cell_height: options.cell_height,
+            }),
         });
         let emulator = ports.emulator.create(&options.emulator_options(), host.clone());
 

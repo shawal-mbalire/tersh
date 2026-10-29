@@ -2,15 +2,21 @@
 //! or removed fonts are picked up without a restart.
 
 use std::path::PathBuf;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use tersh_app::ports::{Fingerprint, Watchable};
 
 use crate::config_fs::{files_in, modified_times};
 
+/// How often we rescan the system font directories on disk.
+const FONT_SCAN_INTERVAL: Duration = Duration::from_secs(5);
+
 /// The platform's font directories.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct SystemFontDirs {
     dirs: Vec<PathBuf>,
+    cache: Mutex<Option<(Instant, Fingerprint)>>,
 }
 
 impl SystemFontDirs {
@@ -28,7 +34,16 @@ impl SystemFontDirs {
             dirs.extend(home.iter().map(|h| h.join(".fonts")));
             dirs.extend(["/usr/share/fonts", "/usr/local/share/fonts"].map(PathBuf::from));
         }
-        Self { dirs }
+        Self { dirs, cache: Mutex::new(None) }
+    }
+
+    fn scan(&self) -> Fingerprint {
+        let mut paths = Vec::new();
+        for dir in &self.dirs {
+            paths.push(dir.clone());
+            paths.extend(files_in(dir, 1).into_iter().filter(|p| p.is_dir()));
+        }
+        modified_times(paths)
     }
 }
 
@@ -42,12 +57,15 @@ impl Watchable for SystemFontDirs {
     /// Directory times only (two levels deep): adding or removing a font file
     /// changes its directory's time, and it stays cheap with thousands of fonts.
     fn fingerprint(&self) -> Fingerprint {
-        let mut paths = Vec::new();
-        for dir in &self.dirs {
-            paths.push(dir.clone());
-            paths.extend(files_in(dir, 1).into_iter().filter(|p| p.is_dir()));
+        let mut cache = self.cache.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some((when, ref fp)) = *cache {
+            if when.elapsed() < FONT_SCAN_INTERVAL {
+                return fp.clone();
+            }
         }
-        modified_times(paths)
+        let fp = self.scan();
+        *cache = Some((Instant::now(), fp.clone()));
+        fp
     }
 }
 
@@ -60,10 +78,10 @@ mod tests {
         let root = std::env::temp_dir().join(format!("tersh-fonts-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("Family")).unwrap();
-        let fonts = SystemFontDirs { dirs: vec![root.clone()] };
-        let before = fonts.fingerprint();
+        let fonts = SystemFontDirs { dirs: vec![root.clone()], cache: Mutex::new(None) };
+        let before = fonts.scan();
         std::thread::sleep(std::time::Duration::from_millis(20));
         std::fs::write(root.join("Family/New.ttf"), b"").unwrap();
-        assert_ne!(before, fonts.fingerprint());
+        assert_ne!(before, fonts.scan());
     }
 }

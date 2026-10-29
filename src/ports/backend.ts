@@ -26,7 +26,7 @@ export interface CardDocuments {
 
 export interface Backend {
   /** Attach to the session (starting it on first call); output arrives through `handlers`. */
-  startSession(cols: number, rows: number, handlers: SessionHandlers): Promise<SessionInfo>;
+  startSession(cols: number, rows: number, cellWidth: number, cellHeight: number, handlers: SessionHandlers): Promise<SessionInfo>;
   write(data: string): Promise<void>;
   resize(cols: number, rows: number, cellWidth: number, cellHeight: number): Promise<void>;
   /** Scroll the viewport through history; positive is up. */

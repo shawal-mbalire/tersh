@@ -64,6 +64,10 @@ fetch() { # fetch URL FILE
   curl -fL --progress-bar "$1" -o "$2" || die "download failed: $1"
 }
 
+try_fetch() { # try_fetch URL FILE
+  curl -fsSL "$1" -o "$2" 2>/dev/null
+}
+
 # Replace FILE with SOURCE in one step (rename), so running copies of the old
 # file keep working and running tersh windows see the new one appear.
 replace() { # replace SOURCE FILE MODE
@@ -73,45 +77,94 @@ replace() { # replace SOURCE FILE MODE
 
 mkdir -p "$BIN_DIR"
 
+# Also update any other tersh/tersh-show copies earlier on PATH (e.g. ~/.cargo/bin).
+overridden_bins() { # overridden_bins NAME
+  IFS=:
+  for dir in $PATH; do
+    [ -n "$dir" ] && [ "$dir" != "$BIN_DIR" ] && [ -e "$dir/$1" ] && [ -w "$dir" ] && printf '%s\n' "$dir/$1"
+  done
+  unset IFS
+}
+
+install_bin() { # install_bin SOURCE NAME
+  replace "$1" "$BIN_DIR/$2" 755
+  chmod 755 "$BIN_DIR/$2"
+  for target in $(overridden_bins "$2"); do
+    replace "$1" "$target" 755
+    chmod 755 "$target"
+  done
+}
+
 # ---- tersh-show ---------------------------------------------------------------
 say "Installing tersh-show $VERSION"
 fetch "$base/tersh-show-$platform-$arch.tar.gz" "$tmp/tersh-show.tar.gz"
 tar -xzf "$tmp/tersh-show.tar.gz" -C "$tmp"
-replace "$tmp/tersh-show" "$BIN_DIR/tersh-show" 755
+install_bin "$tmp/tersh-show" "tersh-show"
 
 # ---- app ----------------------------------------------------------------------
 if [ "$WITH_APP" = 1 ]; then
   if [ "$platform" = linux ]; then
     appimage_arch=$([ "$arch" = x86_64 ] && echo amd64 || echo aarch64)
-    say "Installing tersh $VERSION (AppImage)"
+    say "Installing tersh $VERSION"
     share="${XDG_DATA_HOME:-$HOME/.local/share}"
     mkdir -p "$share/tersh" "$share/applications" "$share/icons/hicolor/128x128/apps"
     fetch "$base/tersh_${number}_${appimage_arch}.AppImage" "$tmp/tersh.AppImage"
     replace "$tmp/tersh.AppImage" "$share/tersh/tersh.AppImage" 755
 
-    # AppImages need FUSE 2; without it, run them by extracting instead.
-    fuse_line=""
-    if ! { ldconfig -p 2>/dev/null | grep -q 'libfuse\.so\.2'; } && [ ! -e /usr/lib/libfuse.so.2 ] && [ ! -e /usr/lib64/libfuse.so.2 ]; then
-      fuse_line="export APPIMAGE_EXTRACT_AND_RUN=1"
+    # Extract the AppImage once at install time so launching tersh is instant
+    # and works on distributions without FUSE 2 (e.g. Fedora 40+, Ubuntu 24.04+).
+    rm -rf "$share/tersh/app.new" "$share/tersh/app.old"
+    (cd "$tmp" && "$share/tersh/tersh.AppImage" --appimage-extract >/dev/null 2>&1) || true
+    if [ -x "$tmp/squashfs-root/AppRun" ]; then
+      mv "$tmp/squashfs-root" "$share/tersh/app.new"
+      [ -e "$share/tersh/app" ] && mv -f "$share/tersh/app" "$share/tersh/app.old"
+      mv -f "$share/tersh/app.new" "$share/tersh/app"
+      rm -rf "$share/tersh/app.old"
     fi
-    printf '#!/bin/sh\n%s\nexec "%s" "$@"\n' "$fuse_line" "$share/tersh/tersh.AppImage" >"$tmp/tersh-wrapper"
-    replace "$tmp/tersh-wrapper" "$BIN_DIR/tersh" 755
-    chmod 755 "$BIN_DIR/tersh"
 
-    fetch "https://raw.githubusercontent.com/$REPO/$VERSION/src-tauri/icons/128x128.png" \
-      "$share/icons/hicolor/128x128/apps/tersh.png" 2>/dev/null || true
+    # WebKitGTK's DMABUF renderer silently crashes Tauri apps on Hyprland and
+    # some Wayland/Sway setups; disable it (falls back to a working path).
+    cat >"$tmp/tersh-wrapper" <<EOF
+#!/bin/sh
+export WEBKIT_DISABLE_DMABUF_RENDERER=1
+export TERSH_WRAPPER="$BIN_DIR/tersh"
+if [ -x "$share/tersh/app/AppRun" ]; then
+  exec "$share/tersh/app/AppRun" "\$@"
+fi
+if ! { PATH="\$PATH:/sbin:/usr/sbin" ldconfig -p 2>/dev/null | grep -q 'libfuse\.so\.2'; } && [ ! -e /usr/lib/libfuse.so.2 ] && [ ! -e /usr/lib64/libfuse.so.2 ] && [ ! -e /lib/x86_64-linux-gnu/libfuse.so.2 ] && [ ! -e /lib/aarch64-linux-gnu/libfuse.so.2 ]; then
+  export APPIMAGE_EXTRACT_AND_RUN=1
+fi
+exec "$share/tersh/tersh.AppImage" "\$@"
+EOF
+    install_bin "$tmp/tersh-wrapper" "tersh"
+
+    try_fetch "https://raw.githubusercontent.com/$REPO/$VERSION/src-tauri/icons/128x128.png" \
+      "$share/icons/hicolor/128x128/apps/tersh.png" || true
     cat >"$share/applications/tersh.desktop" <<EOF
 [Desktop Entry]
 Type=Application
 Name=tersh
 Comment=Lightweight terminal with rich media cards
 Exec=$BIN_DIR/tersh
+TryExec=$BIN_DIR/tersh
 Icon=tersh
 Terminal=false
+StartupWMClass=tersh
 Categories=System;TerminalEmulator;
 Keywords=terminal;shell;console;
 EOF
     command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database "$share/applications" >/dev/null 2>&1 || true
+
+    # carapace shell completion, if carapace is in use.
+    if [ -d "${XDG_CONFIG_HOME:-$HOME/.config}/carapace/specs" ]; then
+      try_fetch "$base/tersh_completion_${number}.yaml" \
+        "${XDG_CONFIG_HOME:-$HOME/.config}/carapace/specs/tersh.yaml" \
+        || try_fetch "https://raw.githubusercontent.com/$REPO/$VERSION/completions/tersh.yaml" \
+        "${XDG_CONFIG_HOME:-$HOME/.config}/carapace/specs/tersh.yaml" \
+        || try_fetch "https://raw.githubusercontent.com/$REPO/main/completions/tersh.yaml" \
+        "${XDG_CONFIG_HOME:-$HOME/.config}/carapace/specs/tersh.yaml" \
+        || true
+    fi
   else
     dmg_arch=$([ "$arch" = x86_64 ] && echo x64 || echo aarch64)
     say "Installing tersh $VERSION (macOS app)"
@@ -137,7 +190,7 @@ EOF
 if [ \$# -gt 0 ]; then exec "$apps/tersh.app/Contents/MacOS/tersh" "\$@"; fi
 exec open -a "$apps/tersh.app"
 EOF
-    replace "$tmp/tersh-wrapper" "$BIN_DIR/tersh" 755
+    install_bin "$tmp/tersh-wrapper" "tersh"
   fi
 fi
 

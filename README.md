@@ -52,6 +52,14 @@ same directory and window size:
 
 Set `[update] auto_restart = false` to only be notified.
 
+### Shell completions
+
+tersh ships a [carapace](https://github.com/carapace-sh/carapace-bin) spec so
+`tersh`, `tersh update --check`, `--cwd` (directories), `--size` and friends
+complete in bash, zsh, fish, nushell and others. The installer drops it in
+`~/.config/carapace/specs/tersh.yaml` when you have carapace set up; otherwise
+copy `completions/tersh.yaml` there manually.
+
 ## Building from source
 
 ```sh

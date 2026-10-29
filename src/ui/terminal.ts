@@ -57,7 +57,13 @@ export class Terminal {
     },
   ) {
     this.fontSize = config.font.size;
-    this.renderer = new GridRenderer(els.canvas, els.cursor, config.font, new Palette(config.theme, config.font.bold_is_bright));
+    this.renderer = new GridRenderer(
+      els.canvas,
+      els.cursor,
+      config.font,
+      new Palette(config.theme, config.font.bold_is_bright),
+      config.window.opacity,
+    );
     this.cards = new CardManager(els.cards, (message) => this.notify(message, "error"));
     for (const [kind, renderer] of Object.entries(builtinRenderers)) this.cards.renderers.set(kind, renderer);
     this.bindings = resolveKeybindings(config.keybindings, isMac);
@@ -74,14 +80,14 @@ export class Terminal {
   async start() {
     const { cols, rows } = this.measureGrid();
     this.renderer.resize(cols, rows);
+    const { cellWidth, cellHeight } = this.renderer.metrics;
 
-    await this.backend.startSession(cols, rows, {
+    await this.backend.startSession(cols, rows, Math.round(cellWidth), Math.round(cellHeight), {
       frame: (frame) => this.onFrame(frame),
       rich: (message) => this.onRich(message),
       event: (event) => this.onEvent(event),
     });
     this.started = true;
-    this.sendResize(cols, rows);
     new ResizeObserver(() => this.scheduleResize()).observe(this.els.terminal);
     this.els.input.focus();
   }
@@ -101,6 +107,7 @@ export class Terminal {
     this.config = config;
     this.bindings = resolveKeybindings(config.keybindings, isMac);
     this.renderer.palette = new Palette(config.theme, config.font.bold_is_bright);
+    this.renderer.opacity = config.window.opacity;
     const font = config.font;
     const old = previous.font;
     if (font.family !== old.family || font.size !== old.size || font.line_height !== old.line_height) {
@@ -255,13 +262,13 @@ export class Terminal {
   }
 
   private scheduleResize() {
-    clearTimeout(this.resizeTimer);
-    this.resizeTimer = window.setTimeout(() => {
+    cancelAnimationFrame(this.resizeTimer);
+    this.resizeTimer = requestAnimationFrame(() => {
       const { cols, rows } = this.measureGrid();
       if (cols === this.renderer.cols && rows === this.renderer.rows) return;
       this.renderer.resize(cols, rows);
       this.sendResize(cols, rows);
-    }, 16);
+    });
   }
 
   private sendResize(cols: number, rows: number) {
@@ -277,11 +284,19 @@ export class Terminal {
   }
 
   private applyFont() {
+    const prev = this.renderer.metrics;
+    const prevCols = this.renderer.cols;
+    const prevRows = this.renderer.rows;
     this.renderer.setFont({ ...this.config.font, size: this.fontSize });
     this.els.cursor.style.fontSize = `${this.fontSize}px`;
     const { cols, rows } = this.measureGrid();
-    this.renderer.resize(cols, rows);
-    this.sendResize(cols, rows);
+    const next = this.renderer.metrics;
+    if (cols !== prevCols || rows !== prevRows || next.cellWidth !== prev.cellWidth || next.cellHeight !== prev.cellHeight) {
+      this.renderer.resize(cols, rows);
+      this.sendResize(cols, rows);
+    } else {
+      this.renderer.invalidate();
+    }
     this.schedulePaint();
   }
 

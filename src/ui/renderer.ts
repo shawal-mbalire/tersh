@@ -1,7 +1,7 @@
 import type { Config, Frame, Metrics, Run } from "../domain/types";
 import { CellFlag, Mode } from "../domain/types";
 import { withSymbols } from "../domain/fonts";
-import { BG, FG, Palette } from "../domain/palette";
+import { BG, FG, Palette, parseHex } from "../domain/palette";
 
 const UNDERLINES =
   CellFlag.UNDERLINE | CellFlag.DOUBLE_UNDERLINE | CellFlag.UNDERCURL | CellFlag.DOTTED_UNDERLINE | CellFlag.DASHED_UNDERLINE;
@@ -11,6 +11,17 @@ const UNDERLINES =
  * the core) and only rows touched by a frame are repainted. Default-background
  * cells stay transparent so the window's translucent backdrop shows through.
  */
+/** Return true when `s` contains only printable ASCII (`0x20..=0x7E`), which
+ *  in a monospace font is guaranteed to be 1 UTF-16 code unit and 1 cell wide
+ *  without needing surrogate-pair iteration or per-character `fillText`. */
+function isAscii(s: string): boolean {
+  for (let i = 0; i < s.length; i++) {
+    const code = s.charCodeAt(i);
+    if (code < 0x20 || code > 0x7e) return false;
+  }
+  return true;
+}
+
 export class GridRenderer {
   cols = 0;
   rows = 0;
@@ -24,23 +35,38 @@ export class GridRenderer {
   private dpr = 1;
   private fonts = new Map<number, string>();
   private currentFont = "";
+  /** Alpha applied to painted cell backgrounds (from `window.opacity`). */
+  private bgAlpha = 1;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly cursorEl: HTMLElement,
     private font: Config["font"],
     public palette: Palette,
+    bgAlpha = 1,
   ) {
     const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) throw new Error("2D canvas unavailable");
     this.ctx = ctx;
+    this.bgAlpha = bgAlpha;
     this.measure();
+  }
+
+  /** Value in `window.opacity` that painted backgrounds are faded to (`0..1`). */
+  get opacity(): number {
+    return this.bgAlpha;
+  }
+
+  set opacity(value: number) {
+    const a = Math.min(1, Math.max(0, value));
+    if (a === this.bgAlpha) return;
+    this.bgAlpha = a;
+    this.invalidate();
   }
 
   setFont(font: Config["font"]) {
     this.font = font;
     this.measure();
-    this.resize(this.cols, this.rows);
   }
 
   /** Recompute cell metrics from the configured font. */
@@ -159,7 +185,17 @@ export class GridRenderer {
       if (fg < 8) fgCss = this.palette.resolve(259 + fg);
       else if (fg === FG) fgCss = this.palette.resolve(268);
     }
-    return { fg: fgCss, bg: bg === BG ? null : this.palette.resolve(bg) };
+    return { fg: fgCss, bg: bg === BG ? null : this.fadeBackground(this.palette.resolve(bg)) };
+  }
+
+  /** Apply `window.opacity` to a painted background colour so apps like opencode
+   *  that paint their own backdrop become see-through too. */
+  private fadeBackground(color: string): string {
+    if (this.bgAlpha >= 1) return color;
+    const rgb = parseHex(color);
+    if (!rgb) return color;
+    const [r, g, b] = rgb;
+    return `rgba(${r}, ${g}, ${b}, ${this.bgAlpha})`;
   }
 
   private drawRow(y: number) {
@@ -184,13 +220,19 @@ export class GridRenderer {
         this.currentFont = font;
       }
       ctx.fillStyle = fg;
-      const chars = [...run.t];
-      if (chars.length === run.n) {
-        for (let i = 0; i < chars.length; i++) {
-          if (chars[i] !== " ") ctx.fillText(chars[i], left + i * cw, top + baseline);
-        }
+      if (run.n === 1) {
+        if (run.t !== " ") ctx.fillText(run.t, left, top + baseline);
+      } else if (run.t.length === run.n && isAscii(run.t)) {
+        if (run.t.trim().length > 0) ctx.fillText(run.t, left, top + baseline);
       } else {
-        ctx.fillText(run.t, left, top + baseline);
+        const chars = [...run.t];
+        if (chars.length === run.n) {
+          for (let i = 0; i < chars.length; i++) {
+            if (chars[i] !== " ") ctx.fillText(chars[i], left + i * cw, top + baseline);
+          }
+        } else {
+          ctx.fillText(run.t, left, top + baseline);
+        }
       }
 
       if (run.f & (UNDERLINES | CellFlag.STRIKEOUT)) this.decorate(run.f, fg, left, width, top);
