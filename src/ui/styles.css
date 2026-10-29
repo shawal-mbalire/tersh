@@ -8,19 +8,19 @@
 }
 
 :root {
-  --bg: rgba(30, 30, 30, 0.92);
-  --bg-solid: #1e1e1e;
-  --fg: #d4d4d4;
-  --cursor: #aeafad;
-  --selection: #264f78;
-  --accent: #3b8eea;
+  --bg: rgba(30, 30, 46, 0.92);
+  --bg-solid: #1e1e2e;
+  --fg: #cdd6f4;
+  --cursor: #f5e0dc;
+  --selection: #585b70;
+  --accent: #cba6f7;
   --padding: 10px;
   --font-family: monospace;
   --font-size: 14px;
   --card-bg: color-mix(in srgb, var(--bg-solid) 88%, white 4%);
   --card-border: color-mix(in srgb, var(--fg) 16%, transparent);
   --code-bg: color-mix(in srgb, var(--fg) 7%, transparent);
-  --error: var(--ansi-9, #f14c4c);
+  --error: var(--ansi-9, #f38ba8);
   --shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
   color-scheme: dark;
 }

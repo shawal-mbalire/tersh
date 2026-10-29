@@ -27,15 +27,15 @@
 # ---- appearance --------------------------------------------------------------
 
 # A theme name. Built in:
+#   catppuccin-mocha (default), catppuccin-macchiato, catppuccin-frappe, catppuccin-latte,
 #   tersh, tersh-light,
-#   catppuccin-mocha, catppuccin-macchiato, catppuccin-frappe, catppuccin-latte,
 #   tokyo-night, tokyo-night-storm, tokyo-night-moon, tokyo-night-day,
 #   rose-pine, rose-pine-moon, rose-pine-dawn,
 #   gruvbox-dark, gruvbox-light, solarized-dark, solarized-light,
 #   github-dark, github-light, nord, dracula, one-dark, kanagawa, everforest-dark
 # Names are forgiving ("tokyonight", "rosepine", "catppuccin" all work), and
 # the name of a file in themes/ works too.
-# theme = "tokyo-night"
+# theme = "catppuccin-mocha"
 
 # Or start from a theme and override some of its colours:
 # [theme]

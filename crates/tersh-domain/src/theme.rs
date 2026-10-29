@@ -227,7 +227,7 @@ fn normalize(name: &str) -> String {
     name.chars().filter(|c| !matches!(c, '-' | '_' | ' ' | '.')).flat_map(char::to_lowercase).collect()
 }
 
-pub const DEFAULT_THEME: &str = "tersh";
+pub const DEFAULT_THEME: &str = "catppuccin-mocha";
 
 struct Builtin {
     name: &'static str,
