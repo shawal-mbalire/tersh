@@ -46,7 +46,11 @@ function Install-Tersh {
 
   $version = $env:TERSH_VERSION
   if (-not $version) {
-    $version = (Invoke-RestMethod "https://api.github.com/repos/$repo/releases/latest").tag_name
+    # github.com redirects /releases/latest to /releases/tag/vX.Y.Z. Unlike the
+    # API, that isn't rate-limited for anonymous use (shared IPs, CI runners).
+    $response = [Net.WebRequest]::Create("https://github.com/$repo/releases/latest").GetResponse()
+    $version = ($response.ResponseUri.AbsoluteUri -split '/tag/')[1]
+    $response.Close()
     if (-not $version) { throw "could not find the latest release of $repo" }
   }
   $number = $version.TrimStart('v')

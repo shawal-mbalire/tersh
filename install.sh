@@ -76,11 +76,15 @@ esac
 case "$os" in
   Linux) platform=linux ;;
   Darwin) platform=macos ;;
-  *) die "unsupported OS: $os (on Windows, download the .msi from https://github.com/$REPO/releases)" ;;
+  *) die "unsupported OS: $os (on Windows, in PowerShell: irm https://raw.githubusercontent.com/$REPO/main/install | iex)" ;;
 esac
 
 if [ -z "$VERSION" ]; then
-  VERSION=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n1)
+  # github.com redirects /releases/latest to /releases/tag/vX.Y.Z. Unlike the
+  # API, that isn't rate-limited for anonymous use (shared IPs, CI runners).
+  latest=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$REPO/releases/latest") || latest=""
+  VERSION=${latest##*/tag/}
+  [ "$VERSION" != "$latest" ] || VERSION=""
   [ -n "$VERSION" ] || die "could not find the latest release of $REPO"
 fi
 number=${VERSION#v}

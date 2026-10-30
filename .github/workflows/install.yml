@@ -24,8 +24,13 @@ jobs:
       - uses: rhysd/action-setup-vim@v1
         with:
           neovim: true
-      - name: tmux
-        run: command -v tmux || (sudo apt-get install -y tmux 2>/dev/null || brew install tmux)
+      - name: tmux, and the GL libraries a desktop has (the AppImage uses the system's)
+        run: |
+          if [ "$(uname)" = Linux ]; then
+            sudo apt-get update -q && sudo apt-get install -y -q tmux libegl1 libgl1 libgles2
+          else
+            command -v tmux || brew install tmux
+          fi
       - name: curl … install | sh
         env:
           TERSH_INSTALL_FROM: ${{ github.workspace }}
