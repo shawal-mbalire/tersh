@@ -67,7 +67,9 @@ impl Installer for InstallScript {
             args.push("--nvim".into());
         }
         let pipeline = format!("curl -fsSL '{script}' | sh -s -- {}", args.join(" "));
-        let status = Command::new("sh")
+        // Without the bundle's PATH, the installer can't mistake the app's own
+        // binary for another copy of tersh to replace.
+        let status = crate::unbundled(&mut Command::new("sh"))
             .args(["-c", &pipeline])
             .stdin(Stdio::null())
             .status()

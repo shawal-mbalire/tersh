@@ -47,7 +47,8 @@ fn open_path(path: &Path) -> CmdResult<()> {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let mut command = std::process::Command::new("xdg-open");
 
-    let mut child = command.arg(path).spawn().map_err(|e| format!("could not open {}: {e}", path.display()))?;
+    // The editor must not load the AppImage's libraries.
+    let mut child = tersh_adapters::unbundled(&mut command).arg(path).spawn().map_err(|e| format!("could not open {}: {e}", path.display()))?;
     // Reap it so it doesn't linger as a zombie.
     thread::spawn(move || child.wait());
     Ok(())
