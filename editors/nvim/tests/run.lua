@@ -189,6 +189,7 @@ test("show_file sends images as data URIs and guesses kinds", function()
   eq(msg.anchor.rows, 6, "rows")
   eq(tersh.guess_kind("fig.json", '{"data":[],"layout":{}}'), "plotly", "plotly")
   eq(tersh.guess_kind("a.ipynb", ""), "notebook", "notebook")
+  eq({ tersh.guess_kind("clip.WEBM", "") }, { "video", "video/webm" }, "video")
 end)
 
 test("preview covers a split and updates as the buffer changes", function()
@@ -236,6 +237,28 @@ test("suspending hides cards and resuming restores them", function()
   eq(expect(op("move", id), "move").hidden, true, "hidden on suspend")
   vim.api.nvim_exec_autocmds("VimResume", {})
   eq(expect(op("move", id), "move").hidden, false, "shown on resume")
+end)
+
+test("send passes raw messages through and reports availability", function()
+  eq(tersh.available(), true, "available with a socket")
+  local reply
+  tersh.send({ op = "show", id = "raw", kind = "markdown", data = "# hi", anchor = { mode = "float", top = 1 } }, function(r)
+    reply = r
+  end)
+  local msg = expect(op("show", "raw"), "raw show")
+  eq(msg.anchor, { mode = "float", top = 1 }, "anchor untouched")
+  vim.wait(500, function()
+    return reply ~= nil
+  end)
+  eq(reply and reply.ok, true, "reply")
+end)
+
+test("the repository root works as a plugin directory", function()
+  vim.g.loaded_tersh = nil
+  local repo = vim.fn.fnamemodify(root, ":h:h")
+  vim.cmd.source(repo .. "/plugin/tersh.lua")
+  eq(vim.fn.exists(":TershPreview"), 2, "commands defined")
+  eq(vim.tbl_contains(vim.opt.runtimepath:get(), root), true, "editors/nvim on runtimepath")
 end)
 
 io.write(string.format("\n%d passed, %d failed\n", passed, failures))

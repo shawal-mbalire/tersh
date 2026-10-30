@@ -285,6 +285,19 @@ function M.attach_window(win, opts)
   return show(card, { kind = opts.kind, data = opts.data, title = opts.title, chrome = opts.chrome, mime = opts.mime })
 end
 
+--- True when cards can be shown: running inside tersh (or `force` is set).
+function M.available()
+  return M.config.force or transport.available()
+end
+
+--- Send a raw protocol message (see docs/protocol.md), e.g. a float card:
+---   tersh.send({ kind = "markdown", data = "# hi", anchor = { mode = "float", top = 2, left = 4, width = 40 } })
+--- `callback(reply)` gets tersh's `{ ok, error? }` reply when the socket is used.
+--- Cards sent this way are not tracked: they don't follow buffer lines.
+function M.send(message, callback)
+  transport.send(message, callback)
+end
+
 --- Replace a card's data (and optionally title).
 function M.update(id, data, title)
   if cards[id] then
@@ -340,6 +353,14 @@ local image_mimes = {
   avif = "image/avif",
 }
 
+local video_mimes = {
+  webm = "video/webm",
+  mp4 = "video/mp4",
+  m4v = "video/mp4",
+  ogv = "video/ogg",
+  mov = "video/quicktime",
+}
+
 local function is_plotly(text)
   local ok, value = pcall(vim.json.decode, text)
   return ok and type(value) == "table" and type(value.data) == "table" and value.layout ~= nil
@@ -350,6 +371,9 @@ function M.guess_kind(name, content)
   local ext = (name:match("%.([%w]+)$") or ""):lower()
   if image_mimes[ext] then
     return "image", image_mimes[ext]
+  end
+  if video_mimes[ext] then
+    return "video", video_mimes[ext]
   end
   local by_ext = { svg = "svg", md = "markdown", markdown = "markdown", html = "html", htm = "html", ipynb = "notebook" }
   if by_ext[ext] then
@@ -371,7 +395,7 @@ local function file_card(path)
   local content = file:read("*a")
   file:close()
   local kind, mime = M.guess_kind(path, content)
-  if kind == "image" then
+  if kind == "image" or kind == "video" then
     return { kind = kind, data = "data:" .. mime .. ";base64," .. vim.base64.encode(content) }
   end
   return { kind = kind, data = content }
