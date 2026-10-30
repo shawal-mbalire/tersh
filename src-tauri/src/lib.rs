@@ -66,6 +66,7 @@ type CmdResult<T> = Result<T, String>;
 
 /// Attach the page to the shell, starting it on first call.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)] // each argument is a named `invoke` parameter from the page
 fn session_start(
     state: State<'_, AppState>,
     cols: u16,
