@@ -2,6 +2,7 @@ import type { Config, Frame, Metrics, Run } from "../domain/types";
 import { CellFlag, Mode } from "../domain/types";
 import { withSymbols } from "../domain/fonts";
 import { BG, FG, Palette, parseHex } from "../domain/palette";
+import { drawShape } from "./shapes";
 
 const UNDERLINES =
   CellFlag.UNDERLINE | CellFlag.DOUBLE_UNDERLINE | CellFlag.UNDERCURL | CellFlag.DOTTED_UNDERLINE | CellFlag.DASHED_UNDERLINE;
@@ -37,6 +38,8 @@ export class GridRenderer {
   private currentFont = "";
   /** Alpha applied to painted cell backgrounds (from `window.opacity`). */
   private bgAlpha = 1;
+  /** Faded background colours by source colour; cleared when opacity changes. */
+  private faded = new Map<string, string>();
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -61,6 +64,7 @@ export class GridRenderer {
     const a = Math.min(1, Math.max(0, value));
     if (a === this.bgAlpha) return;
     this.bgAlpha = a;
+    this.faded.clear();
     this.invalidate();
   }
 
@@ -196,10 +200,14 @@ export class GridRenderer {
    *  that paint their own backdrop become see-through too. */
   private fadeBackground(color: string): string {
     if (this.bgAlpha >= 1) return color;
-    const rgb = parseHex(color);
-    if (!rgb) return color;
-    const [r, g, b] = rgb;
-    return `rgba(${r}, ${g}, ${b}, ${this.bgAlpha})`;
+    let faded = this.faded.get(color);
+    if (faded === undefined) {
+      const rgb = parseHex(color);
+      faded = rgb ? `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${this.bgAlpha})` : color;
+      if (this.faded.size > 4096) this.faded.clear();
+      this.faded.set(color, faded);
+    }
+    return faded;
   }
 
   private drawRow(y: number) {
@@ -233,14 +241,15 @@ export class GridRenderer {
       }
       ctx.fillStyle = fg;
       if (run.n === 1) {
-        if (run.t !== " ") ctx.fillText(run.t, left, top + baseline);
+        if (run.t !== " " && !drawShape(ctx, run.t, left, top, cw, ch)) ctx.fillText(run.t, left, top + baseline);
       } else if (run.t.length === run.n && isAscii(run.t)) {
         if (run.t.trim().length > 0) ctx.fillText(run.t, left, top + baseline);
       } else {
         const chars = [...run.t];
         if (chars.length === run.n) {
           for (let i = 0; i < chars.length; i++) {
-            if (chars[i] !== " ") ctx.fillText(chars[i], left + i * cw, top + baseline);
+            const x = left + i * cw;
+            if (chars[i] !== " " && !drawShape(ctx, chars[i], x, top, cw, ch)) ctx.fillText(chars[i], x, top + baseline);
           }
         } else {
           ctx.fillText(run.t, left, top + baseline);
