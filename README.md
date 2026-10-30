@@ -16,22 +16,36 @@ splits; use tmux for those.
 
 ## Install
 
-macOS and Linux (x86_64 and arm64):
+One installer, [`install`](install), for every OS. It is both a shell script
+and a PowerShell script:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/shawal-mbalire/tersh/main/install.sh | sh
+# macOS and Linux (x86_64, arm64)
+curl -fsSL https://raw.githubusercontent.com/shawal-mbalire/tersh/main/install | sh
 ```
 
-This installs the app and `tersh-show` into `~/.local/bin` and adds a desktop
-entry on Linux. Options go after `sh -s --`:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/shawal-mbalire/tersh/main/install.sh | sh -s -- --nvim     # + Neovim plugin
-curl -fsSL https://raw.githubusercontent.com/shawal-mbalire/tersh/main/install.sh | sh -s -- --no-app   # tersh-show only (e.g. over ssh)
+```powershell
+# Windows (PowerShell)
+irm https://raw.githubusercontent.com/shawal-mbalire/tersh/main/install | iex
 ```
 
-On Windows, download the `.msi` from
-[Releases](https://github.com/shawal-mbalire/tersh/releases).
+It installs everything for the current user:
+
+- **The app:** an AppImage plus a desktop entry on Linux, `tersh.app` in
+  Applications on macOS, a per-user installer and a Start menu entry on
+  Windows. `tersh` is added to your PATH.
+- **`tersh-show`**, the card CLI.
+- **The Neovim plugin:** a lazy.nvim spec if you use lazy.nvim, a package
+  otherwise. It's skipped if your config already has it.
+- **tmux settings:** passthrough, focus events and `TERSH_SOCKET`, in a marked
+  block. On macOS and Linux only.
+- **carapace completions**, if you use carapace.
+
+To skip parts, pass `--no-app`, `--no-nvim`, `--no-tmux` or `--no-completions`
+(`… | sh -s -- --no-app`), or set `TERSH_NO_APP=1` and so on. Use
+`TERSH_VERSION=vX.Y.Z` for a specific release. `tersh update` remembers what you
+skipped. The platform scripts behind `install` are [`install.sh`](install.sh)
+and [`install.ps1`](install.ps1).
 
 ### Updating
 
@@ -268,6 +282,9 @@ set -ga update-environment " TERSH_SOCKET"   # use the faster socket in new pane
 ```
 
 ## Development
+
+[FEATURES.md](FEATURES.md) lists every feature with its status on Linux, macOS
+and Windows. It is the checklist the cross-platform test suite is built from.
 
 The code uses a hexagonal (ports and adapters) layout: a pure domain
 (`crates/tersh-domain`, `src/domain`), use cases and ports

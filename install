@@ -1,0 +1,36 @@
+#!/bin/sh
+set -- "$@" `# <#`
+# tersh installer, for every OS. One file that is both a POSIX shell script
+# and a PowerShell script:
+#
+#   macOS / Linux:        curl -fsSL https://raw.githubusercontent.com/shawal-mbalire/tersh/main/install | sh
+#   Windows (PowerShell): irm https://raw.githubusercontent.com/shawal-mbalire/tersh/main/install | iex
+#
+# It installs everything: the app, tersh-show, the Neovim plugin, shell
+# completions and tmux settings. See install.sh and install.ps1 for options.
+#
+# In sh, line 2 keeps the arguments and the backquotes run nothing. In
+# PowerShell it sets a variable and `<#` opens a comment that hides the sh
+# part. The sh part must not contain a hash followed by a greater-than sign.
+#
+# TERSH_INSTALL_FROM overrides where install.sh / install.ps1 come from: a
+# base URL or a local directory (used by CI to test a checkout).
+
+from="${TERSH_INSTALL_FROM:-https://raw.githubusercontent.com/shawal-mbalire/tersh/main}"
+if [ -f "$from/install.sh" ]; then
+  exec sh "$from/install.sh" "$@"
+fi
+script=$(curl -fsSL "$from/install.sh") || { echo "tersh: could not download $from/install.sh" >&2; exit 1; }
+exec sh -c "$script" tersh-install "$@"
+#>
+
+$ErrorActionPreference = 'Stop'
+$from = if ($env:TERSH_INSTALL_FROM) { $env:TERSH_INSTALL_FROM } else { 'https://raw.githubusercontent.com/shawal-mbalire/tersh/main' }
+if (Test-Path (Join-Path $from 'install.ps1')) {
+  $script = Get-Content -Raw (Join-Path $from 'install.ps1')
+} else {
+  # Windows PowerShell 5.1 may default to TLS 1.0, which GitHub refuses.
+  [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+  $script = Invoke-RestMethod "$from/install.ps1"
+}
+& ([scriptblock]::Create($script))

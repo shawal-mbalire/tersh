@@ -1,0 +1,91 @@
+name: Install
+
+# Runs the one-line installer, as users do, on every OS, and checks what it
+# installed. Uses the installer scripts from this checkout and the latest release.
+on:
+  pull_request:
+    paths: [install, install.sh, install.ps1, .github/workflows/install.yml]
+  push:
+    branches: [main]
+    paths: [install, install.sh, install.ps1, .github/workflows/install.yml]
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  unix:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+      - name: tmux, and the GL libraries a desktop has (the AppImage uses the system's)
+        run: |
+          if [ "$(uname)" = Linux ]; then
+            sudo apt-get update -q && sudo apt-get install -y -q tmux libegl1 libgl1 libgles2
+          else
+            command -v tmux || brew install tmux
+          fi
+      - name: curl … install | sh
+        env:
+          TERSH_INSTALL_FROM: ${{ github.workspace }}
+        run: cat install | sh
+      - name: Check what was installed
+        run: |
+          set -x
+          ~/.local/bin/tersh-show --help | head -1
+          ~/.local/bin/tersh --version
+          test -d "${XDG_DATA_HOME:-$HOME/.local/share}/nvim/site/pack/tersh/start/tersh.nvim/lua/tersh"
+          conf="$HOME/.config/tmux/tmux.conf"; [ -f "$conf" ] || conf="$HOME/.tmux.conf"
+          grep -q ">>> tersh >>>" "$conf"
+          if [ "$(uname)" = Darwin ]; then
+            apps=/Applications; [ -d "$apps/tersh.app" ] || apps="$HOME/Applications"
+            test -x "$apps/tersh.app/Contents/MacOS/tersh"
+          else
+            test -f ~/.local/share/applications/tersh.desktop
+          fi
+      - name: Running it again changes nothing
+        env:
+          TERSH_INSTALL_FROM: ${{ github.workspace }}
+        run: |
+          cat install | sh -s -- --no-app
+          conf="$HOME/.config/tmux/tmux.conf"; [ -f "$conf" ] || conf="$HOME/.tmux.conf"
+          test "$(grep -c '>>> tersh >>>' "$conf")" = 1
+          grep -q NO_APP=1 ~/.config/tersh/install-options
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+      - name: irm … install | iex (Windows PowerShell 5.1)
+        shell: powershell
+        env:
+          TERSH_INSTALL_FROM: ${{ github.workspace }}
+        run: Get-Content -Raw install | iex
+      - name: Check what was installed
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+          Write-Host "User PATH: $userPath"
+          & "$env:LOCALAPPDATA\tersh\bin\tersh-show.exe" --help | Select-Object -First 1
+          if (-not ($userPath -split ';' -contains "$env:LOCALAPPDATA\tersh\bin")) { throw 'tersh-show is not on PATH' }
+          $exe = Get-ChildItem -Recurse -Filter tersh.exe "$env:LOCALAPPDATA\tersh", "$env:LOCALAPPDATA\Programs" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw 'tersh.exe was not installed' }
+          Write-Host "app: $($exe.FullName)"
+          if (-not ($userPath -split ';' -contains $exe.DirectoryName)) { throw 'tersh is not on PATH' }
+          if (-not (Test-Path "$env:LOCALAPPDATA\nvim-data\site\pack\tersh\start\tersh.nvim\lua\tersh")) { throw 'Neovim plugin missing' }
+      - name: PowerShell 7 too
+        shell: pwsh
+        env:
+          TERSH_INSTALL_FROM: ${{ github.workspace }}
+          TERSH_NO_APP: 1
+        run: Get-Content -Raw install | iex
