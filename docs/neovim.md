@@ -15,10 +15,16 @@ back to escape sequences.
 ## Install
 
 ```lua
--- lazy.nvim
-{ dir = "~/src/tersh/editors/nvim", opts = {} }
--- or add the directory to 'runtimepath' and call require("tersh").setup()
+-- lazy.nvim: straight from the tersh repository
+{ "shawal-mbalire/tersh", main = "tersh", lazy = false, opts = {} }
+-- a local checkout
+{ dir = "~/src/tersh", name = "tersh", main = "tersh", lazy = false, opts = {} }
+-- other managers: add editors/nvim to 'runtimepath' and call require("tersh").setup()
 ```
+
+Keep `lazy = false`. The plugin is small, and it has to be loaded at startup to
+preview notebooks as they open. `:checkhealth tersh` checks the connection to
+tersh and the tmux settings.
 
 Neovim 0.10 or newer.
 
@@ -57,6 +63,8 @@ tersh.update(id, new_outputs)     -- replace its data
 tersh.close(id)
 
 tersh.attach_window(win, { kind = "markdown", data = text })   -- cover a window
+tersh.available()                 -- true inside tersh (or with `force`)
+tersh.send(message, callback)     -- any raw protocol message, e.g. a float card; not tracked
 tersh.show_file("~/plots/loss.png", 20)
 tersh.cards_at(buf, line)         -- ids of cards on a line
 tersh.sync(true)                  -- force a reposition (after a custom layout change)

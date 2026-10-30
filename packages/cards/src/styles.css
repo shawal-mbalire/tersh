@@ -1,0 +1,236 @@
+/* @tersh/cards: styles for card content. Theme it with the variables below;
+   tersh sets them from its theme, and they fall back to Catppuccin Mocha. */
+
+:where(:root) {
+  --fg: #cdd6f4;
+  --accent: #cba6f7;
+  --font-family: ui-monospace, monospace;
+  --font-size: 14px;
+  --card-border: color-mix(in srgb, var(--fg) 16%, transparent);
+  --code-bg: color-mix(in srgb, var(--fg) 7%, transparent);
+  --error: var(--ansi-9, #f38ba8);
+}
+
+.card-text,
+.card-error {
+  margin: 0;
+  padding: 8px 10px;
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.card-error {
+  color: var(--error);
+}
+
+.card-image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  margin: auto;
+  object-fit: contain;
+}
+.fixed-height .card-image {
+  width: 100%;
+  height: 100%;
+}
+.card-video {
+  display: block;
+  width: 100%;
+  max-height: 100%;
+  background: #000;
+}
+.fixed-height .card-video {
+  height: 100%;
+  object-fit: contain;
+}
+.card-svg {
+  display: flex;
+  justify-content: center;
+}
+.card-svg svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.embed-html {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+}
+.embed-plotly {
+  width: 100%;
+}
+
+/* ---- markdown --------------------------------------------------------------- */
+
+.markdown {
+  padding: 6px 14px;
+}
+.markdown > :first-child {
+  margin-top: 4px;
+}
+.markdown h1,
+.markdown h2 {
+  border-bottom: 1px solid var(--card-border);
+  padding-bottom: 0.2em;
+}
+.markdown a {
+  color: var(--accent);
+}
+.markdown code {
+  font-family: var(--font-family);
+  font-size: 0.92em;
+  background: color-mix(in srgb, var(--fg) 10%, transparent);
+  border-radius: 3px;
+  padding: 0.1em 0.3em;
+}
+.markdown pre {
+  background: var(--code-bg);
+  border-radius: 4px;
+  padding: 8px 10px;
+  overflow: auto;
+}
+.markdown pre code {
+  background: none;
+  padding: 0;
+}
+.markdown table {
+  border-collapse: collapse;
+}
+.markdown td,
+.markdown th {
+  border: 1px solid var(--card-border);
+  padding: 3px 8px;
+}
+.markdown blockquote {
+  margin-left: 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--card-border);
+  color: color-mix(in srgb, var(--fg) 75%, transparent);
+}
+.markdown img {
+  max-width: 100%;
+}
+pre.hljs,
+.hljs {
+  background: transparent;
+}
+
+/* ---- notebooks --------------------------------------------------------------- */
+
+.nb {
+  padding: 6px 0;
+}
+.nb-cell {
+  margin: 4px 10px 10px;
+}
+.nb-cell.markdown {
+  padding: 0 4px;
+}
+.nb-input {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.nb-prompt {
+  flex: none;
+  width: 4.5ch;
+  padding-top: 7px;
+  text-align: right;
+  font-family: var(--font-family);
+  font-size: 11px;
+  color: color-mix(in srgb, var(--fg) 45%, transparent);
+}
+.nb-source {
+  flex: 1;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--card-border);
+  background: var(--code-bg) !important;
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) * 0.92);
+  overflow-x: auto;
+}
+.nb-outputs {
+  margin-left: calc(4.5ch + 8px);
+  padding-top: 4px;
+}
+.nb-output {
+  overflow-x: auto;
+}
+.nb-output pre {
+  margin: 2px 0;
+  font-family: var(--font-family);
+  font-size: calc(var(--font-size) * 0.92);
+  white-space: pre-wrap;
+}
+.nb-output img {
+  max-width: 100%;
+  background: white;
+}
+.nb-stderr {
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+}
+.nb-traceback {
+  color: var(--error);
+}
+.nb-unsupported {
+  font-style: italic;
+  opacity: 0.6;
+}
+
+.ansi-bold {
+  font-weight: bold;
+}
+.ansi-black {
+  color: var(--ansi-0);
+}
+.ansi-red {
+  color: var(--ansi-1);
+}
+.ansi-green {
+  color: var(--ansi-2);
+}
+.ansi-yellow {
+  color: var(--ansi-3);
+}
+.ansi-blue {
+  color: var(--ansi-4);
+}
+.ansi-magenta {
+  color: var(--ansi-5);
+}
+.ansi-cyan {
+  color: var(--ansi-6);
+}
+.ansi-white {
+  color: var(--ansi-7);
+}
+.ansi-bright-black {
+  color: var(--ansi-8);
+}
+.ansi-bright-red {
+  color: var(--ansi-9);
+}
+.ansi-bright-green {
+  color: var(--ansi-10);
+}
+.ansi-bright-yellow {
+  color: var(--ansi-11);
+}
+.ansi-bright-blue {
+  color: var(--ansi-12);
+}
+.ansi-bright-magenta {
+  color: var(--ansi-13);
+}
+.ansi-bright-cyan {
+  color: var(--ansi-14);
+}
+.ansi-bright-white {
+  color: var(--ansi-15);
+}

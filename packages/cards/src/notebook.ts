@@ -30,23 +30,9 @@ export interface Notebook {
   };
 }
 
-/** Rich MIME types we can render, best first (mirrors VS Code / JupyterLab priority). */
-export const MIME_PRIORITY = [
-  "application/vnd.plotly.v1+json",
-  "text/html",
-  "image/svg+xml",
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "text/markdown",
-  "text/latex",
-  "application/json",
-  "text/plain",
-] as const;
+import { pickMime } from "./mime";
 
-export function pickMime(bundle: Record<string, unknown>): string | null {
-  return MIME_PRIORITY.find((m) => m in bundle) ?? null;
-}
+export { MIME_PRIORITY, pickMime } from "./mime";
 
 type Markdown = typeof import("./markdown");
 let markdown: Promise<Markdown> | null = null;

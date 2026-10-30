@@ -11,23 +11,30 @@ use std::process::ExitCode;
 use base64::Engine;
 use serde_json::{json, Map, Value};
 
+mod serve;
+
 const USAGE: &str = "\
 Usage: tersh-show [OPTIONS] [FILE|-]...
 
-Show files as rich cards in tersh: images, SVG, markdown (with LaTeX), HTML,
-Plotly figures (JSON), Jupyter notebooks, JSON and text.
+Show files as rich cards in tersh: images, video, SVG, markdown (with LaTeX),
+HTML, Plotly figures (JSON), Jupyter notebooks, JSON and text.
 
 Options:
-  -k, --kind KIND    Card kind (image, svg, markdown, html, plotly, notebook,
-                     output, json, text). Guessed from the file name by default.
+  -k, --kind KIND    Card kind (image, video, svg, markdown, html, plotly,
+                     notebook, output, json, text). Guessed from the file name
+                     by default.
   -r, --rows N       Rows to reserve below the prompt for an inline card.
   -f, --float        Float the card over the terminal instead of inline.
+  -p, --pane         Cover the current tmux pane with the card.
   -t, --title TEXT   Card title.
       --id ID        Card id, to update or close it later.
   -u, --update       Replace the data of the card given by --id.
       --close ID     Close a card.
       --clear        Close all cards.
       --osc          Write escape sequences even if $TERSH_SOCKET is set.
+      --serve [ADDR] Accept cards over HTTP (POST /cards) and show them in
+                     this terminal. ADDR defaults to 127.0.0.1:7701.
+      --token TOKEN  Bearer token --serve requires (default: random).
   -h, --help         Show this help.
 ";
 
@@ -37,17 +44,20 @@ struct Args {
     kind: Option<String>,
     rows: Option<u16>,
     float: bool,
+    pane: bool,
     title: Option<String>,
     id: Option<String>,
     update: bool,
     close: Option<String>,
     clear: bool,
     osc: bool,
+    serve: Option<String>,
+    token: Option<String>,
 }
 
 fn parse_args() -> Result<Args, String> {
     let mut args = Args::default();
-    let mut iter = std::env::args().skip(1);
+    let mut iter = std::env::args().skip(1).peekable();
     while let Some(arg) = iter.next() {
         let mut value = |name: &str| iter.next().ok_or_else(|| format!("{name} needs a value"));
         match arg.as_str() {
@@ -58,12 +68,20 @@ fn parse_args() -> Result<Args, String> {
             "-k" | "--kind" => args.kind = Some(value(&arg)?),
             "-r" | "--rows" => args.rows = Some(value(&arg)?.parse().map_err(|_| "--rows needs a number")?),
             "-f" | "--float" => args.float = true,
+            "-p" | "--pane" => args.pane = true,
             "-t" | "--title" => args.title = Some(value(&arg)?),
             "--id" => args.id = Some(value(&arg)?),
             "-u" | "--update" => args.update = true,
             "--close" => args.close = Some(value(&arg)?),
             "--clear" => args.clear = true,
             "--osc" => args.osc = true,
+            "--serve" => {
+                args.serve = Some(match iter.peek() {
+                    Some(next) if !next.starts_with('-') => iter.next().unwrap_or_default(),
+                    _ => "127.0.0.1:7701".into(),
+                })
+            },
+            "--token" => args.token = Some(value(&arg)?),
             "-" => args.files.push(arg),
             s if s.starts_with('-') => return Err(format!("unknown option {s}\n\n{USAGE}")),
             _ => args.files.push(arg),
@@ -72,7 +90,7 @@ fn parse_args() -> Result<Args, String> {
     if args.update && args.id.is_none() {
         return Err("--update needs --id".into());
     }
-    if args.files.is_empty() && args.close.is_none() && !args.clear {
+    if args.files.is_empty() && args.close.is_none() && !args.clear && args.serve.is_none() {
         if io::stdin().is_terminal() {
             return Err(USAGE.into());
         }
@@ -85,6 +103,7 @@ fn parse_args() -> Result<Args, String> {
 fn guess_kind(path: &str, content: &[u8]) -> (String, Option<&'static str>) {
     let ext = Path::new(path).extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
     let image = |mime| ("image".to_string(), Some(mime));
+    let video = |mime| ("video".to_string(), Some(mime));
     match ext.as_str() {
         "png" => image("image/png"),
         "jpg" | "jpeg" => image("image/jpeg"),
@@ -92,6 +111,10 @@ fn guess_kind(path: &str, content: &[u8]) -> (String, Option<&'static str>) {
         "webp" => image("image/webp"),
         "bmp" => image("image/bmp"),
         "avif" => image("image/avif"),
+        "webm" => video("video/webm"),
+        "mp4" | "m4v" => video("video/mp4"),
+        "ogv" => video("video/ogg"),
+        "mov" => video("video/quicktime"),
         "svg" => ("svg".into(), None),
         "md" | "markdown" => ("markdown".into(), None),
         "html" | "htm" => ("html".into(), None),
@@ -110,6 +133,10 @@ fn sniff(content: &[u8]) -> (String, Option<&'static str>) {
         ("image".into(), Some("image/jpeg"))
     } else if content.starts_with(b"GIF8") {
         ("image".into(), Some("image/gif"))
+    } else if content.starts_with(b"\x1a\x45\xdf\xa3") {
+        ("video".into(), Some("video/webm"))
+    } else if content.get(4..8) == Some(b"ftyp") {
+        ("video".into(), Some("video/mp4"))
     } else if start.starts_with(b"<svg") || (start.starts_with(b"<?xml") && content.windows(4).any(|w| w == b"<svg")) {
         ("svg".into(), None)
     } else if start.starts_with(b"{") && looks_like_plotly(content) {
@@ -128,9 +155,10 @@ fn looks_like_plotly(content: &[u8]) -> bool {
 /// The `data` field for a card of `kind`.
 fn card_data(kind: &str, content: Vec<u8>, mime: Option<&str>) -> Result<Value, String> {
     match kind {
-        "image" => {
+        "image" | "video" => {
+            let fallback = if kind == "video" { "video/webm" } else { "image/png" };
             let b64 = base64::engine::general_purpose::STANDARD.encode(&content);
-            Ok(Value::String(format!("data:{};base64,{b64}", mime.unwrap_or("image/png"))))
+            Ok(Value::String(format!("data:{};base64,{b64}", mime.unwrap_or(fallback))))
         },
         "notebook" | "plotly" | "json" | "output" => {
             serde_json::from_slice(&content).map_err(|e| format!("invalid JSON for {kind} card: {e}"))
@@ -201,6 +229,35 @@ impl Transport {
     }
 }
 
+/// Cells covered by the current tmux pane: `(row, col, rows, cols)` in the
+/// terminal's coordinates, so counting a status line at the top.
+fn tmux_pane() -> Result<(u16, u16, u16, u16), String> {
+    if std::env::var_os("TMUX").is_none() {
+        return Err("--pane only works inside tmux".into());
+    }
+    let mut cmd = std::process::Command::new("tmux");
+    cmd.args(["display-message", "-p"]);
+    if let Some(pane) = std::env::var_os("TMUX_PANE") {
+        cmd.arg("-t").arg(pane);
+    }
+    cmd.arg("#{pane_top} #{pane_left} #{pane_height} #{pane_width} #{status} #{status-position}");
+    let out = cmd.output().map_err(|e| format!("tmux: {e}"))?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    parse_pane(&text).ok_or_else(|| format!("unexpected tmux reply: {}", text.trim()))
+}
+
+fn parse_pane(text: &str) -> Option<(u16, u16, u16, u16)> {
+    let fields: Vec<&str> = text.split_whitespace().collect();
+    let [top, left, rows, cols, status, position] = fields[..] else { return None };
+    let status_lines = match status {
+        "off" => 0,
+        "on" => 1,
+        n => n.parse().ok()?,
+    };
+    let offset = if position == "top" { status_lines } else { 0 };
+    Some((top.parse::<u16>().ok()? + offset, left.parse().ok()?, rows.parse().ok()?, cols.parse().ok()?))
+}
+
 fn read_input(file: &str) -> Result<Vec<u8>, String> {
     if file == "-" {
         let mut buf = Vec::new();
@@ -217,6 +274,10 @@ fn run() -> Result<(), String> {
 
     if args.clear {
         transport.send(&json!({ "op": "clear" }))?;
+    }
+    if let Some(addr) = &args.serve {
+        let token = args.token.clone().unwrap_or_else(serve::new_token);
+        return serve::serve(addr, &token, |message| transport.send(message));
     }
     if let Some(id) = &args.close {
         transport.send(&json!({ "op": "close", "id": id }))?;
@@ -248,6 +309,13 @@ fn run() -> Result<(), String> {
         message.insert("data".into(), data);
 
         if args.update {
+            transport.send(&Value::Object(message))?;
+            continue;
+        }
+
+        if args.pane {
+            let (row, col, rows, cols) = tmux_pane()?;
+            message.insert("anchor".into(), json!({ "mode": "cell", "row": row, "col": col, "rows": rows, "cols": cols }));
             transport.send(&Value::Object(message))?;
             continue;
         }
@@ -292,6 +360,9 @@ mod tests {
         assert_eq!(guess_kind("-", b"\x89PNG\r\n").1, Some("image/png"));
         assert_eq!(guess_kind("-", b"  <svg xmlns=''/>").0, "svg");
         assert_eq!(guess_kind("-", b"hello").0, "text");
+        assert_eq!(guess_kind("clip.webm", b""), ("video".into(), Some("video/webm")));
+        assert_eq!(guess_kind("-", b"\x1a\x45\xdf\xa3\x01").0, "video");
+        assert_eq!(guess_kind("-", b"\0\0\0\x20ftypisom").1, Some("video/mp4"));
     }
 
     #[test]
@@ -299,6 +370,14 @@ mod tests {
         assert_eq!(card_data("image", vec![1, 2, 3], Some("image/png")).unwrap(), "data:image/png;base64,AQID");
         assert!(card_data("notebook", b"nope".to_vec(), None).is_err());
         assert_eq!(card_data("markdown", b"# hi".to_vec(), None).unwrap(), "# hi");
+    }
+
+    #[test]
+    fn pane_geometry_counts_a_top_status_line() {
+        assert_eq!(parse_pane("0 81 40 80 on top\n"), Some((1, 81, 40, 80)));
+        assert_eq!(parse_pane("5 0 20 100 2 top"), Some((7, 0, 20, 100)));
+        assert_eq!(parse_pane("5 0 20 100 on bottom"), Some((5, 0, 20, 100)));
+        assert_eq!(parse_pane("garbage"), None);
     }
 
     #[test]

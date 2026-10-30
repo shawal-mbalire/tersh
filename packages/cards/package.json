@@ -1,0 +1,48 @@
+{
+  "name": "@tersh/cards",
+  "version": "0.3.0",
+  "description": "The renderers tersh draws rich cards with: Jupyter notebooks, markdown with LaTeX, Plotly, HTML, SVG, images and video, for any web page.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shawal-mbalire/tersh",
+    "directory": "packages/cards"
+  },
+  "keywords": [
+    "jupyter",
+    "notebook",
+    "markdown",
+    "katex",
+    "plotly",
+    "renderer",
+    "tersh"
+  ],
+  "sideEffects": [
+    "*.css"
+  ],
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "scripts": {
+    "build": "vite build && tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "dompurify": "^3.4.17",
+    "highlight.js": "^11.12.0",
+    "katex": "^0.18.10",
+    "marked": "^18.1.1",
+    "marked-katex-extension": "^5.1.13",
+    "plotly.js-dist-min": "^4.1.2"
+  }
+}

@@ -1,25 +1,8 @@
+import type { CardInstance, CardRenderer } from "@tersh/cards";
 import { type Anchor, cardBox, type Geometry, isExpired, type RichMessage } from "../../domain/cards";
 
 export type { Anchor, RichMessage };
-
-export interface CardContext {
-  id: string;
-  kind: string;
-  data: unknown;
-  message: RichMessage;
-  /** Element to render into. */
-  el: HTMLElement;
-  /** Ask for the card to be re-laid out (e.g. after content changed size). */
-  relayout(): void;
-}
-
-export interface CardInstance {
-  /** Called with new data on `update`. If absent the card is re-rendered from scratch. */
-  update?(data: unknown, message: RichMessage): void | Promise<void>;
-  dispose?(): void;
-}
-
-export type CardRenderer = (ctx: CardContext) => void | CardInstance | Promise<void | CardInstance>;
+export type { CardContext, CardInstance, CardRenderer } from "@tersh/cards";
 
 interface Card {
   id: string;

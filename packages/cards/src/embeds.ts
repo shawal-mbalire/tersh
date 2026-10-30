@@ -1,6 +1,6 @@
 // Embeds shared by several renderers: isolated HTML documents and Plotly figures.
 
-import { cardDocuments } from "../documents";
+import { documentHost } from "./documents";
 
 export interface Embed {
   el: HTMLElement;
@@ -41,7 +41,7 @@ export async function mountHtml(
     a { color: ${cssVar("--accent", "#3b8eea")}; }
     table { border-collapse: collapse; } td, th { border: 1px solid #8884; padding: 2px 6px; }
   </style>${HEIGHT_REPORTER(token)}`;
-  const documents = cardDocuments();
+  const documents = documentHost();
   await documents.put(token, base + html);
 
   const iframe = document.createElement("iframe");

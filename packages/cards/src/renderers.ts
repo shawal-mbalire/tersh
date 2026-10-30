@@ -1,8 +1,8 @@
 // Built-in card renderers. They use the same API as plugin renderers.
 
-import type { CardRenderer } from "../manager";
+import type { CardRenderer } from "./types";
 import type { Embed, PlotlyFigure } from "./embeds";
-import { imageSource, joinText, parseMaybeJson } from "./util";
+import { imageSource, joinText, mediaUrl, parseMaybeJson } from "./util";
 
 const loadMarkdown = () => import("./markdown");
 const loadEmbeds = () => import("./embeds");
@@ -52,6 +52,36 @@ export const image: CardRenderer = ({ el, data, message, relayout }) => {
   set(data);
   el.append(img);
   return { update: set };
+};
+
+/** A video clip: a URL, a `data:` URI, or base64 with a `mime` field. Plays muted and
+ *  looping by default; `autoplay`, `loop`, `muted` and `controls` override. */
+export const video: CardRenderer = ({ el, data, message, relayout }) => {
+  const flag = (name: string, fallback: boolean) => (typeof message[name] === "boolean" ? (message[name] as boolean) : fallback);
+  const player = document.createElement("video");
+  player.className = "card-video";
+  player.autoplay = flag("autoplay", true);
+  player.loop = flag("loop", true);
+  player.muted = flag("muted", true);
+  player.controls = flag("controls", true);
+  player.playsInline = true;
+  player.addEventListener("loadedmetadata", relayout);
+  let source = { url: "", release() {} };
+  const set = (value: unknown) => {
+    source.release();
+    source = mediaUrl(value, typeof message.mime === "string" ? message.mime : "video/webm");
+    player.src = source.url;
+  };
+  set(data);
+  el.append(player);
+  return {
+    update: set,
+    dispose() {
+      player.removeAttribute("src");
+      player.load();
+      source.release();
+    },
+  };
 };
 
 export const svg: CardRenderer = async ({ el, data, relayout }) => {
@@ -118,6 +148,7 @@ export const builtinRenderers: Record<string, CardRenderer> = {
   json,
   markdown,
   image,
+  video,
   svg,
   html,
   plotly,

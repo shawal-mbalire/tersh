@@ -3,7 +3,7 @@
 
 import { version as packageVersion } from "../../package.json";
 import { CardManager, type CardRenderer, type RichMessage } from "./cards/manager";
-import { builtinRenderers } from "./cards/renderers";
+import { builtinRenderers } from "@tersh/cards";
 import { comboFromEvent, normalizeCombo, resolveKeybindings } from "../domain/keys";
 import { type ActionHandler, Emitter, type GridInfo, type KeyHandler, type RichHandler, type TershAPI } from "./plugins/api";
 import { encodeKey, encodeMouse, encodePaste, type MouseAction, normalizeTyped } from "../domain/input";
