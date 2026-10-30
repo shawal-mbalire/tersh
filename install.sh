@@ -78,9 +78,16 @@ replace() { # replace SOURCE FILE MODE
 mkdir -p "$BIN_DIR"
 
 # Also update any other tersh/tersh-show copies earlier on PATH (e.g. ~/.cargo/bin).
+# Skip the extracted app: when `tersh update` runs this script, the AppImage
+# has put its own usr/bin on PATH, and its `tersh` is the real binary that
+# the wrapper launches. Replacing it with the wrapper makes it exec itself.
 overridden_bins() { # overridden_bins NAME
+  app_dir="${XDG_DATA_HOME:-$HOME/.local/share}/tersh"
   IFS=:
   for dir in $PATH; do
+    case "$dir" in
+      "$app_dir"/* | "${APPDIR:-/nonexistent}"/*) continue ;;
+    esac
     [ -n "$dir" ] && [ "$dir" != "$BIN_DIR" ] && [ -e "$dir/$1" ] && [ -w "$dir" ] && printf '%s\n' "$dir/$1"
   done
   unset IFS
