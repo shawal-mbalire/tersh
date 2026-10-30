@@ -1,6 +1,6 @@
 # tersh
 
-A small, fast terminal that can show rich content. You get images, markdown
+A small, fast terminal that can show rich content. You get images, video, markdown
 with LaTeX, Plotly charts, SVG, HTML and whole Jupyter notebooks, drawn as
 cards over the text grid and kept in step with it. tersh has no tabs or
 splits; use tmux for those.
@@ -232,8 +232,10 @@ SVG, Plotly JSON and notebooks.
 
 ```lua
 -- lazy.nvim
-{ dir = "~/src/tersh/editors/nvim", opts = {} }
+{ "shawal-mbalire/tersh", main = "tersh", lazy = false, opts = {} }
 ```
+
+`:checkhealth tersh` reports whether Neovim can reach tersh.
 
 | Command                | What it does                                                    |
 | ---------------------- | --------------------------------------------------------------- |
@@ -245,6 +247,15 @@ Opening an `.ipynb` file opens its preview automatically. Turn this off with
 `auto_preview = {}`. Other plugins can use the Lua API
 (`require("tersh").attach{...}`, `update`, `close`, `attach_window`), for
 example to show cell outputs under code. See [docs/neovim.md](docs/neovim.md).
+
+### Building on tersh
+
+Other programs can use the cards too: Neovim plugins through the Lua API, web
+servers and any language through `tersh-show --serve` (HTTP), and web pages
+through [`@tersh/cards`](packages/cards), the renderers as a standalone
+package. See [docs/building-on-tersh.md](docs/building-on-tersh.md), and
+[`examples/demos`](examples/demos) for a video in a tmux pane and a notebook
+in Neovim.
 
 ### tmux
 

@@ -13,6 +13,10 @@ send them:
   must know a card is placed before you print more. The socket only
   accepts the user's own connections (mode `0600`).
 
+Programs that can't reach the socket (a web server in a container, a language
+without Unix sockets) can use HTTP through `tersh-show --serve`. See
+[building-on-tersh.md](building-on-tersh.md#web-servers-and-other-languages).
+
 Setting `rich.osc = false` makes tersh accept cards only from the socket. Then
 `cat`-ing an untrusted file can't create cards.
 
@@ -29,17 +33,17 @@ Setting `rich.osc = false` makes tersh accept cards only from the socket. Then
 }
 ```
 
-| Field    | Meaning                                                                                                           |
-| -------- | ----------------------------------------------------------------------------------------------------------------- |
-| `op`     | `show` (default), `update`, `move`, `close`, `clear`, `info` (socket only: returns the grid size and cursor)      |
-| `id`     | Card id. `show` with an existing id replaces that card. Omit it for a generated id.                               |
-| `kind`   | Renderer: `text`, `json`, `markdown`, `image`, `svg`, `html`, `plotly`, `notebook`, `output`, or a plugin's kind. |
-| `data`   | Content (see below).                                                                                              |
-| `title`  | Title shown in the card's header.                                                                                 |
-| `chrome` | `false` hides the header and frame.                                                                               |
-| `hidden` | `true` keeps the card but doesn't draw it (e.g. its line scrolled out of an editor window).                       |
-| `anchor` | Where the card goes (see below). `update` and `move` without `anchor` keep the current one.                       |
-| `screen` | For `clear`: only clear `"primary"` or `"alt"` cards.                                                             |
+| Field    | Meaning                                                                                                                    |
+| -------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `op`     | `show` (default), `update`, `move`, `close`, `clear`, `info` (socket only: returns the grid size and cursor)               |
+| `id`     | Card id. `show` with an existing id replaces that card. Omit it for a generated id.                                        |
+| `kind`   | Renderer: `text`, `json`, `markdown`, `image`, `video`, `svg`, `html`, `plotly`, `notebook`, `output`, or a plugin's kind. |
+| `data`   | Content (see below).                                                                                                       |
+| `title`  | Title shown in the card's header.                                                                                          |
+| `chrome` | `false` hides the header and frame.                                                                                        |
+| `hidden` | `true` keeps the card but doesn't draw it (e.g. its line scrolled out of an editor window).                                |
+| `anchor` | Where the card goes (see below). `update` and `move` without `anchor` keep the current one.                                |
+| `screen` | For `clear`: only clear `"primary"` or `"alt"` cards.                                                                      |
 
 `update` replaces `data` (and any other fields given). It creates the card if
 it doesn't exist and `kind` is given. `move` changes only `anchor` and `hidden`.
@@ -57,17 +61,18 @@ the alternate screen are removed when the program leaves it.
 
 ### Data by kind
 
-| Kind       | `data`                                                                                      |
-| ---------- | ------------------------------------------------------------------------------------------- |
-| `text`     | string                                                                                      |
-| `markdown` | string; `$...$` and `$$...$$` are rendered with KaTeX                                       |
-| `json`     | any JSON value (or a string holding JSON)                                                   |
-| `image`    | `data:` URI, or base64 with a `mime` field                                                  |
-| `svg`      | SVG markup (sanitised)                                                                      |
-| `html`     | HTML document; runs in a sandboxed iframe with no network unless `rich.html_network = true` |
-| `plotly`   | `{ "data": [...], "layout": {...} }` (object or JSON string)                                |
-| `notebook` | an nbformat 4 notebook (object or JSON string)                                              |
-| `output`   | one Jupyter output, a list of them, or a bare MIME bundle                                   |
+| Kind       | `data`                                                                                             |
+| ---------- | -------------------------------------------------------------------------------------------------- |
+| `text`     | string                                                                                             |
+| `markdown` | string; `$...$` and `$$...$$` are rendered with KaTeX                                              |
+| `json`     | any JSON value (or a string holding JSON)                                                          |
+| `image`    | `data:` URI, or base64 with a `mime` field                                                         |
+| `video`    | like `image`; plays muted and looping. `autoplay`, `loop`, `muted`, `controls` (booleans) override |
+| `svg`      | SVG markup (sanitised)                                                                             |
+| `html`     | HTML document; runs in a sandboxed iframe with no network unless `rich.html_network = true`        |
+| `plotly`   | `{ "data": [...], "layout": {...} }` (object or JSON string)                                       |
+| `notebook` | an nbformat 4 notebook (object or JSON string)                                                     |
+| `output`   | one Jupyter output, a list of them, or a bare MIME bundle                                          |
 
 ## Shell example
 
@@ -79,4 +84,9 @@ card() {  # card KIND FILE
 ```
 
 `tersh-show` (in `crates/tersh-show`) does this properly, including kind
-detection, images and tmux.
+detection, images, video and tmux. `tersh-show --pane FILE` covers the current
+tmux pane with the card.
+
+Video plays through the system's media stack. On Linux that is GStreamer: WebM
+(VP8/VP9) works with the usual `gst-plugins-good`; MP4/H.264 needs the libav
+plugin (`gstreamer1-plugin-libav` on Fedora).
