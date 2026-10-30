@@ -50,3 +50,4 @@ Thumbs.db
 
 # Local tool state
 .claude/
+/packages/cards/dist

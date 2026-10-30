@@ -11,29 +11,31 @@ export function joinText(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-/** Accepts a data URL, a base64 string plus mime type, or `{data|src, mime}`. */
+/** Accepts a URL (`data:`, `blob:`, `http(s):` or `./relative`), a base64 string plus mime type, or `{data|src, mime}`. */
 export function imageSource(data: unknown, mime = "image/png"): string {
   if (data && typeof data === "object" && !Array.isArray(data)) {
     const obj = data as Record<string, unknown>;
     return imageSource(obj.src ?? obj.data, typeof obj.mime === "string" ? obj.mime : mime);
   }
   const text = joinText(data).trim();
-  if (text.startsWith("data:") || text.startsWith("blob:")) return text;
+  if (/^(data:|blob:|https?:\/\/|\.\.?\/)/.test(text)) return text;
   if (mime === "image/svg+xml" && text.startsWith("<")) return `data:${mime};charset=utf-8,${encodeURIComponent(text)}`;
   return `data:${mime};base64,${text.replace(/\s+/g, "")}`;
 }
 
 /**
- * A `blob:` URL for media sent like an image (see `imageSource`). Large clips
- * play from a blob rather than a multi-megabyte `data:` URI; revoke it when done.
+ * A URL for media sent like an image (see `imageSource`). Inline data plays
+ * from a `blob:` URL rather than a multi-megabyte `data:` URI; `release` frees
+ * it (other URLs are left alone).
  */
-export function mediaUrl(data: unknown, mime: string): string {
+export function mediaUrl(data: unknown, mime: string): { url: string; release(): void } {
   const source = imageSource(data, mime);
   const match = /^data:([^;,]*)(;base64)?,/.exec(source);
-  if (!match) return source;
+  if (!match) return { url: source, release() {} };
   const body = source.slice(match[0].length);
   const bytes = match[2] ? Uint8Array.from(atob(body), (c) => c.charCodeAt(0)) : new TextEncoder().encode(decodeURIComponent(body));
-  return URL.createObjectURL(new Blob([bytes], { type: match[1] || mime }));
+  const url = URL.createObjectURL(new Blob([bytes], { type: match[1] || mime }));
+  return { url, release: () => URL.revokeObjectURL(url) };
 }
 
 export function parseMaybeJson(data: unknown): unknown {

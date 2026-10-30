@@ -2,7 +2,7 @@
 
 import "@fontsource-variable/sono/wght.css";
 import { TauriBackend } from "./adapters/tauri/backend";
-import { setCardDocuments } from "./ui/cards/documents";
+import { setDocumentHost } from "@tersh/cards";
 import { loadFonts } from "./ui/fonts";
 import { PluginHost } from "./ui/plugins/loader";
 import { applySettings } from "./ui/settings";
@@ -20,7 +20,7 @@ function reportWarnings(terminal: Terminal, settings: Settings) {
 
 async function main() {
   const backend = new TauriBackend();
-  setCardDocuments(backend.cardDocuments);
+  setDocumentHost(backend.cardDocuments);
   const settings = await backend.getSettings();
   applySettings(settings);
 

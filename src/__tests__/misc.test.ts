@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { pickMime } from "../ui/cards/renderers/notebook";
-import { ansiToHtml } from "../ui/cards/renderers/ansi";
-import { imageSource, joinText } from "../ui/cards/renderers/util";
+import { pickMime } from "../../packages/cards/src/notebook";
+import { ansiToHtml } from "../../packages/cards/src/ansi";
+import { imageSource, joinText } from "../../packages/cards/src/util";
 import { comboFromEvent, normalizeCombo } from "../domain/keys";
 import { Palette, parseHex } from "../domain/palette";
 import { RGB_FLAG } from "../domain/types";

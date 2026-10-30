@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>@tersh/cards example</title>
+    <style>
+      body {
+        margin: 0 auto;
+        max-width: 960px;
+        padding: 24px;
+        background: #1e1e2e;
+        color: #cdd6f4;
+        font:
+          15px system-ui,
+          sans-serif;
+      }
+      .card {
+        margin: 16px 0;
+        border: 1px solid #45475a;
+        border-radius: 10px;
+        overflow: hidden;
+        background: #181825;
+      }
+      .card > h2 {
+        margin: 0;
+        padding: 6px 12px;
+        font-size: 13px;
+        color: #a6adc8;
+        border-bottom: 1px solid #45475a;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>@tersh/cards</h1>
+    <p>tersh's card renderers in a plain web page.</p>
+    <section class="card">
+      <h2>markdown</h2>
+      <div id="markdown"></div>
+    </section>
+    <section class="card">
+      <h2>video</h2>
+      <div id="video"></div>
+    </section>
+    <section class="card">
+      <h2>showcase.ipynb</h2>
+      <div id="notebook"></div>
+    </section>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

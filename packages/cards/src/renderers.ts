@@ -54,7 +54,7 @@ export const image: CardRenderer = ({ el, data, message, relayout }) => {
   return { update: set };
 };
 
-/** A video clip: a `data:` URI, or base64 with a `mime` field. Plays muted and
+/** A video clip: a URL, a `data:` URI, or base64 with a `mime` field. Plays muted and
  *  looping by default; `autoplay`, `loop`, `muted` and `controls` override. */
 export const video: CardRenderer = ({ el, data, message, relayout }) => {
   const flag = (name: string, fallback: boolean) => (typeof message[name] === "boolean" ? (message[name] as boolean) : fallback);
@@ -66,11 +66,11 @@ export const video: CardRenderer = ({ el, data, message, relayout }) => {
   player.controls = flag("controls", true);
   player.playsInline = true;
   player.addEventListener("loadedmetadata", relayout);
-  let url = "";
+  let source = { url: "", release() {} };
   const set = (value: unknown) => {
-    if (url) URL.revokeObjectURL(url);
-    url = mediaUrl(value, typeof message.mime === "string" ? message.mime : "video/webm");
-    player.src = url;
+    source.release();
+    source = mediaUrl(value, typeof message.mime === "string" ? message.mime : "video/webm");
+    player.src = source.url;
   };
   set(data);
   el.append(player);
@@ -79,7 +79,7 @@ export const video: CardRenderer = ({ el, data, message, relayout }) => {
     dispose() {
       player.removeAttribute("src");
       player.load();
-      URL.revokeObjectURL(url);
+      source.release();
     },
   };
 };
