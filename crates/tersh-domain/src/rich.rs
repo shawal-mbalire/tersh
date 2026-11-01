@@ -34,6 +34,8 @@ pub enum Chunk<'a> {
     Bytes(&'a [u8]),
     /// The body of a rich OSC sequence.
     Payload(Vec<u8>),
+    /// A rich OSC sequence longer than [`MAX_PAYLOAD`], which was consumed and dropped.
+    Oversized,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -166,7 +168,7 @@ impl OscScanner {
     fn finish(&mut self, out: &mut impl FnMut(Chunk<'_>)) {
         let payload = std::mem::take(&mut self.payload);
         if self.overflow {
-            log::warn!("dropping rich payload larger than {MAX_PAYLOAD} bytes");
+            out(Chunk::Oversized);
         } else {
             out(Chunk::Payload(payload));
         }
@@ -272,6 +274,7 @@ mod tests {
             scanner.feed(chunk, |c| match c {
                 Chunk::Bytes(b) => bytes.extend_from_slice(b),
                 Chunk::Payload(p) => payloads.push(p),
+                Chunk::Oversized => payloads.push(b"<oversized>".to_vec()),
             });
         }
         (bytes, payloads)

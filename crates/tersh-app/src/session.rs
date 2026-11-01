@@ -29,6 +29,10 @@ use crate::ports::{
 /// Minimum time between frames during heavy output (~240 Hz). The first frame
 /// after a quiet period is sent immediately, so keystroke echo is never delayed.
 const FRAME_INTERVAL: Duration = Duration::from_millis(4);
+/// How much program output to read at once.
+const READ_BUFFER: usize = 64 * 1024;
+/// How long the render thread sleeps when nothing is pending; any output wakes it.
+const IDLE_WAIT: Duration = Duration::from_secs(3600);
 
 /// Variables a new terminal must not inherit from whatever launched the app:
 /// it is not inside that tmux, nor inside another tersh.
@@ -42,8 +46,10 @@ pub struct SessionOptions {
     /// `None` starts in the home directory.
     pub cwd: Option<PathBuf>,
     pub env: Vec<(String, String)>,
-    /// The environment the shell would inherit. Paths into tersh's own
-    /// bundle (the AppImage) are removed from it before the shell starts.
+    /// The environment the shell would inherit, filled in by the entry point
+    /// (the only place that reads the process environment). Paths into
+    /// tersh's own bundle (the AppImage) are removed from it before the shell
+    /// starts.
     pub inherited_env: Vec<(String, String)>,
     pub cols: u16,
     pub rows: u16,
@@ -65,7 +71,7 @@ impl SessionOptions {
             args: config.args.clone(),
             cwd: None,
             env: config.env.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
-            inherited_env: std::env::vars().collect(),
+            inherited_env: Vec::new(),
             cols,
             rows,
             cell_width: 0,
@@ -295,7 +301,7 @@ impl Session {
         // alive, and must not keep a dropped session's memory with it.
         let weak = Arc::downgrade(&shared);
         thread::Builder::new().name("tersh-pty-read".into()).spawn(move || {
-            let mut buf = vec![0u8; 64 * 1024];
+            let mut buf = vec![0u8; READ_BUFFER];
             loop {
                 let n = match output.read(&mut buf) {
                     Ok(0) | Err(_) => break,
@@ -450,6 +456,7 @@ impl Shared {
                     messages.push((payload, emulator.anchor_context()));
                 },
                 Chunk::Payload(_) => {},
+                Chunk::Oversized => log::warn!("dropping rich payload larger than {} bytes", rich::MAX_PAYLOAD),
             });
         }
         let counters = &self.host.counters;
@@ -540,7 +547,7 @@ impl Shared {
         loop {
             // Wake for new output, or when a synchronized update times out.
             let deadline = lock(&self.state).emulator.sync_deadline();
-            let wait = deadline.map_or(Duration::from_secs(3600), |d| d.saturating_duration_since(Instant::now()));
+            let wait = deadline.map_or(IDLE_WAIT, |d| d.saturating_duration_since(Instant::now()));
             match wake.recv_timeout(wait) {
                 Ok(()) | Err(RecvTimeoutError::Timeout) => {},
                 Err(RecvTimeoutError::Disconnected) => return,

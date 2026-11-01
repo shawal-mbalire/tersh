@@ -35,6 +35,11 @@ Dependencies only point inward: `tersh-domain` ← `tersh-app` ← `tersh-adapte
 ← `src-tauri`. Cargo enforces this, because a crate can't use one it doesn't
 depend on.
 
+The domain does no I/O at all, not even logging: the OSC scanner reports a
+dropped oversized payload as `Chunk::Oversized` and the session logs it. Only
+entry points read the process environment; `SessionOptions::inherited_env` is
+filled in by `src-tauri`.
+
 ## Frontend (`src/`)
 
 | Directory        | Layer       | Contents                                                                                                                          |

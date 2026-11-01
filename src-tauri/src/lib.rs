@@ -107,6 +107,7 @@ fn session_start(
             let mut options = SessionOptions::from_config(&state.config.lock().unwrap(), cols, rows);
             options.cell_width = cell_width;
             options.cell_height = cell_height;
+            options.inherited_env = std::env::vars().collect();
             let launch = std::mem::take(&mut *state.launch.lock().unwrap());
             options.cwd = launch.cwd;
             let rich_enabled = state.config.lock().unwrap().rich.enabled;
