@@ -1,8 +1,8 @@
 // Applies user settings to the page: theme colours as CSS variables and the
 // user's style.css.
 
-import { cssVariables, isLight } from "../domain/theme";
-import type { Settings } from "../domain/types";
+import { cssVariables, isLight } from "../../domain/theme";
+import type { Settings } from "../../domain/types";
 
 export function applySettings(settings: Settings, root: HTMLElement = document.documentElement) {
   const { config } = settings;

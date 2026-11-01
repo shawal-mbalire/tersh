@@ -2,7 +2,7 @@
 // land on the cell grid whatever the font's own character widths are.
 
 import { describe, expect, it } from "vitest";
-import { GridRenderer } from "../ui/renderer";
+import { GridRenderer } from "../adapters/dom/renderer";
 import { Palette } from "../domain/palette";
 import type { Frame, Run } from "../domain/types";
 

@@ -1,7 +1,7 @@
-import type { Config, Frame, Metrics, Run } from "../domain/types";
-import { CellFlag, Mode } from "../domain/types";
-import { withSymbols } from "../domain/fonts";
-import { BG, FG, Palette, parseHex } from "../domain/palette";
+import type { Config, Frame, Metrics, Run } from "../../domain/types";
+import { CellFlag, Mode } from "../../domain/types";
+import { withSymbols } from "../../domain/fonts";
+import { BG, FG, Palette, parseHex } from "../../domain/palette";
 import { drawShape } from "./shapes";
 
 const UNDERLINES =

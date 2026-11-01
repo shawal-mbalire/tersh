@@ -1,18 +1,21 @@
-// Composition root: picks the Tauri backend and wires it into the terminal UI.
+// Composition root: the Tauri backend and the page, wired to the terminal use case.
 
 import "@fontsource-variable/sono/wght.css";
 import { TauriBackend } from "./adapters/tauri/backend";
 import { setDocumentHost } from "@tersh/cards";
-import { loadFonts } from "./ui/fonts";
-import { PluginHost } from "./ui/plugins/loader";
-import { applySettings } from "./ui/settings";
-import { Terminal } from "./ui/terminal";
+import { loadFonts } from "./adapters/dom/fonts";
+import { PluginHost } from "./adapters/dom/plugins/loader";
+import { applySettings } from "./adapters/dom/settings";
+import { DomScreen, isMac } from "./adapters/dom/terminal";
+import { createApi } from "./adapters/dom/plugins/api";
+import { profiled } from "./adapters/dom/profiler";
+import { TerminalApp } from "./app/terminal";
 import type { Settings } from "./domain/types";
 
 const byId = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 /** Show config problems without burying the terminal in toasts. */
-function reportWarnings(terminal: Terminal, settings: Settings) {
+function reportWarnings(terminal: TerminalApp<KeyboardEvent>, settings: Settings) {
   const { warnings } = settings.config;
   for (const warning of warnings.slice(0, 3)) terminal.notify(warning, "error");
   if (warnings.length > 3) terminal.notify(`…and ${warnings.length - 3} more problems in ${settings.config_path}`, "error");
@@ -25,7 +28,7 @@ async function main() {
   const settings = await backend.getSettings();
   applySettings(settings);
 
-  const terminal = new Terminal(settings.config, backend, {
+  const screen = new DomScreen(settings.config, backend, {
     terminal: byId("terminal"),
     canvas: byId<HTMLCanvasElement>("grid"),
     cursor: byId("cursor"),
@@ -34,15 +37,19 @@ async function main() {
     input: byId<HTMLTextAreaElement>("input"),
     toasts: byId("toasts"),
   });
+  const terminal = new TerminalApp<KeyboardEvent>(settings.config, profiled(backend, screen.profiler), screen, isMac);
+  screen.attach(terminal);
+  const api = createApi(terminal, screen, backend);
+
   // Start the shell and load fonts concurrently so the shell initializes while
   // WebKit finishes rasterising the bundled font faces.
   const fontsReady = loadFonts(settings.config.font).then(() => document.fonts.ready);
-  await Promise.all([terminal.start(), fontsReady]);
+  await Promise.all([terminal.start().then(() => screen.started()), fontsReady]);
   terminal.refreshFonts();
-  (window as unknown as { tersh: unknown }).tersh = terminal.api;
+  (window as unknown as { tersh: unknown }).tersh = api;
   reportWarnings(terminal, settings);
 
-  const plugins = new PluginHost(terminal.api, backend);
+  const plugins = new PluginHost(api, backend);
   let current = settings;
 
   // Anything in the settings directory, plugins included, or the installed fonts changed.

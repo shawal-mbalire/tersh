@@ -52,13 +52,16 @@ Rules inside the layers, checked by `crates/tersh-adapters/tests/architecture.rs
 
 ## Frontend (`src/`)
 
-| Directory        | Layer       | Contents                                                                                                                          |
-| ---------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `domain/`        | domain      | Shared types, key and mouse encoding, palette resolution, keybinding tables, theme-to-CSS-variable mapping, card anchor geometry. |
-| `ports/`         | port        | `Backend`: session I/O, settings, clipboard, window, card documents.                                                              |
-| `adapters/tauri` | adapter     | `TauriBackend`, the only code that imports `@tauri-apps/*`.                                                                       |
-| `ui/`            | UI          | Canvas grid renderer, terminal controller, card manager, plugin API and loader, style sheet.                                      |
-| `main.ts`        | composition | Creates `TauriBackend` and hands it to the UI.                                                                                    |
+The page is a hexagon of its own, with the same layers:
+
+| Directory        | Layer           | Contents                                                                                                                                                                                                                 |
+| ---------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `domain/`        | domain          | Shared types, key and mouse encoding, palette resolution, keybinding tables, theme-to-CSS-variable mapping, card anchor geometry, selection geometry, wheel handling, profiler maths, the plugin event types.            |
+| `ports/`         | ports           | `Backend` (the host: session I/O, settings, clipboard, window, card documents) and `Screen` (what the terminal draws on).                                                                                                |
+| `app/`           | use case        | `TerminalApp`: what keys, mouse reports, actions and session events mean; the action and keybinding registries; zoom; telling the host the window is ready. Talks only to `Backend` and `Screen`; tested with fakes.     |
+| `adapters/dom`   | driving adapter | The page: `DomScreen` (canvas renderer, selection, cards, toasts) implements `Screen` and turns DOM events into calls on `TerminalApp`. Also the profiler overlay, the plugin API and loader, fonts and the style sheet. |
+| `adapters/tauri` | driven adapter  | `TauriBackend`, the only code that imports `@tauri-apps/*`.                                                                                                                                                              |
+| `main.ts`        | composition     | Creates `TauriBackend` and `DomScreen`, wraps the backend in the profiler (`profiled`), and wires them to `TerminalApp`.                                                                                                 |
 
 The card renderers live in [`packages/cards`](../packages/cards) (`@tersh/cards`).
 It is a standalone package with no tersh dependencies, so web pages can use it
@@ -66,13 +69,15 @@ too. The app builds it from source through a Vite alias and plugs in its own
 `tersh-card:` document host.
 
 `src/__tests__/architecture.test.ts` fails the build if a layer imports one it
-shouldn't. For example, it fails if `ui/` imports Tauri or `domain/` imports
-`ui/`.
+shouldn't (for example `app/` importing an adapter, or the page importing
+Tauri), or if `domain/`, `ports/` or `app/` touch the DOM.
 
 ## Testing at each layer
 
 - **Domain:** plain unit tests (`cargo test -p tersh-domain`, and the
   `domain/` tests in vitest).
+- **Page use case:** `src/__tests__/app.test.ts` drives `TerminalApp` with a
+  fake backend and screen.
 - **Application:** `crates/tersh-app/tests/session_with_fakes.rs` drives a
   `Session` with an in-memory PTY and emulator. No processes or terminal
   library are involved.

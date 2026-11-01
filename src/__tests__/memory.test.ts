@@ -3,9 +3,9 @@
 
 import { describe, expect, it } from "vitest";
 import { builtinRenderers, setDocumentHost } from "@tersh/cards";
-import { CardManager, type CardRenderer } from "../ui/cards/manager";
-import { Emitter } from "../ui/plugins/api";
-import { Profiler } from "../ui/profiler";
+import { CardManager, type CardRenderer } from "../adapters/dom/cards/manager";
+import { Emitter } from "../adapters/dom/plugins/api";
+import { Profiler } from "../adapters/dom/profiler";
 import { Samples } from "../domain/profile";
 import type { Frame, SessionStats } from "../domain/types";
 

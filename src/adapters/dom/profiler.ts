@@ -3,8 +3,9 @@
 // action). Measuring is always on and costs two `performance.now()` calls per
 // paint; polling and the overlay only run while it is visible.
 
-import { type BackendRates, rates, report, Samples, type UiProfile } from "../domain/profile";
-import type { SessionStats } from "../domain/types";
+import { type BackendRates, rates, report, Samples, type UiProfile } from "../../domain/profile";
+import type { SessionStats } from "../../domain/types";
+import type { Backend } from "../../ports/backend";
 
 const POLL_MS = 1000;
 
@@ -110,4 +111,34 @@ export class Profiler {
     if (!this.el) return;
     this.el.textContent = ["tersh profiler", ...report(this.snapshot(), this.stats, this.backend)].join("\n");
   }
+}
+
+/**
+ * `backend`, telling `profiler` whenever input is sent and a frame arrives.
+ * Measuring happens here, at the edge, so the use case has no timing code.
+ */
+export function profiled(backend: Backend, profiler: Profiler): Backend {
+  return new Proxy(backend, {
+    get(target, prop) {
+      if (prop === "write") {
+        return (data: string) => {
+          profiler.input();
+          return target.write(data);
+        };
+      }
+      if (prop === "startSession") {
+        const start: Backend["startSession"] = (cols, rows, cellWidth, cellHeight, handlers) =>
+          target.startSession(cols, rows, cellWidth, cellHeight, {
+            ...handlers,
+            frame: (frame) => {
+              profiler.frame();
+              handlers.frame(frame);
+            },
+          });
+        return start;
+      }
+      const value: unknown = Reflect.get(target, prop, target);
+      return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value;
+    },
+  });
 }
