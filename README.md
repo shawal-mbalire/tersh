@@ -321,3 +321,25 @@ npm test && npm run typecheck                          # frontend, including the
 cargo test                                             # domain, use cases (with fakes), adapters, tersh-show
 nvim --headless -u NONE -l editors/nvim/tests/run.lua  # Neovim plugin
 ```
+
+## Credits
+
+tersh is built on the work of these projects. Thank you to their authors and
+contributors.
+
+| Component                                                                                                                | Used for                                                      | License                             |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- | ----------------------------------- |
+| [alacritty_terminal](https://github.com/alacritty/alacritty) and [vte](https://github.com/alacritty/vte)                 | Terminal emulation: escape-sequence parsing, grid, scrollback | Apache-2.0 (vte: Apache-2.0 or MIT) |
+| [portable-pty](https://github.com/wezterm/wezterm) from WezTerm                                                          | Pseudo-terminals on Linux, macOS and Windows                  | MIT                                 |
+| [Tauri](https://github.com/tauri-apps/tauri)                                                                             | The desktop window, webview and IPC                           | Apache-2.0 or MIT                   |
+| [Sono](https://github.com/sursly/sono) by the Sono Project Authors, via [Fontsource](https://fontsource.org)             | The bundled default font                                      | SIL OFL 1.1                         |
+| [marked](https://github.com/markedjs/marked)                                                                             | Markdown cards                                                | MIT                                 |
+| [KaTeX](https://github.com/KaTeX/KaTeX) with [marked-katex-extension](https://github.com/UziTech/marked-katex-extension) | Maths in cards                                                | MIT                                 |
+| [highlight.js](https://github.com/highlightjs/highlight.js)                                                              | Syntax highlighting in code cards                             | BSD-3-Clause                        |
+| [Plotly.js](https://github.com/plotly/plotly.js)                                                                         | Plot cards                                                    | MIT                                 |
+| [DOMPurify](https://github.com/cure53/DOMPurify)                                                                         | Sanitising HTML in cards                                      | MPL-2.0 or Apache-2.0               |
+
+tersh also uses [serde](https://serde.rs), [toml](https://github.com/toml-rs/toml),
+[anyhow](https://github.com/dtolnay/anyhow) and other crates and npm packages
+listed in `Cargo.lock` and `package-lock.json`, each under its own license.
+tersh itself is [MIT licensed](LICENSE).
