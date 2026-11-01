@@ -2,7 +2,7 @@
 // tests): the terminal session, the user's settings, the clipboard and the window.
 
 import type { RichMessage } from "../domain/cards";
-import type { Frame, SessionInfo, Settings, TermEvent } from "../domain/types";
+import type { Frame, SessionInfo, SessionStats, Settings, TermEvent } from "../domain/types";
 
 export interface SessionHandlers {
   frame(frame: Frame): void;
@@ -32,6 +32,8 @@ export interface Backend {
   /** Scroll the viewport through history; positive is up. */
   scroll(lines: number): Promise<void>;
   scrollToBottom(): Promise<void>;
+  /** Profiling counters of the session (and the host process's memory). */
+  stats(): Promise<SessionStats>;
 
   getSettings(): Promise<Settings>;
   onSettingsChanged(handler: (settings: Settings) => void): Promise<void>;
@@ -44,6 +46,8 @@ export interface Backend {
   writeClipboard(text: string): Promise<void>;
   setTitle(title: string): Promise<void>;
   closeWindow(): Promise<void>;
+  /** The first frame is on screen: the host may now show the window. */
+  windowReady(): Promise<void>;
 
   /** A newer version was installed over this one (e.g. by `tersh update`). */
   onAppUpdated(handler: (version: string) => void): Promise<void>;

@@ -20,7 +20,8 @@ pub struct SystemFontDirs {
 }
 
 impl SystemFontDirs {
-    pub fn new() -> Self {
+    /// `windows_dir` is `%WINDIR%` on Windows (ignored elsewhere).
+    pub fn new(windows_dir: Option<PathBuf>) -> Self {
         let home = dirs::home_dir();
         let mut dirs: Vec<PathBuf> = Vec::new();
         if cfg!(target_os = "macos") {
@@ -28,7 +29,7 @@ impl SystemFontDirs {
             dirs.extend(["/Library/Fonts", "/System/Library/Fonts"].map(PathBuf::from));
         } else if cfg!(windows) {
             dirs.extend(dirs::data_local_dir().map(|d| d.join("Microsoft/Windows/Fonts")));
-            dirs.push(PathBuf::from(std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".into())).join("Fonts"));
+            dirs.push(windows_dir.unwrap_or_else(|| PathBuf::from("C:\\Windows")).join("Fonts"));
         } else {
             dirs.extend(dirs::data_dir().map(|d| d.join("fonts")));
             dirs.extend(home.iter().map(|h| h.join(".fonts")));
@@ -47,11 +48,6 @@ impl SystemFontDirs {
     }
 }
 
-impl Default for SystemFontDirs {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 impl Watchable for SystemFontDirs {
     /// Directory times only (two levels deep): adding or removing a font file

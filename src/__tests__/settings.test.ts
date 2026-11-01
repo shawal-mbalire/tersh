@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { normalizeCombo, resolveKeybindings } from "../domain/keys";
 import { cssVariables, isLight } from "../domain/theme";
-import { applySettings } from "../ui/settings";
+import { applySettings } from "../adapters/dom/settings";
 import type { Config, Settings } from "../domain/types";
 
 const config = (overrides: Partial<Config> = {}): Config => ({

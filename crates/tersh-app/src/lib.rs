@@ -2,6 +2,7 @@
 //! [`settings`], [`update`]s) and the [`ports`] they need. Adapters in `tersh-adapters`
 //! implement the ports; UIs such as the Tauri app drive the use cases.
 
+pub mod instrumented;
 pub mod ports;
 pub mod session;
 pub mod settings;

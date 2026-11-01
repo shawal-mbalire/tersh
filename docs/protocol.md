@@ -9,7 +9,8 @@ send them:
   passthrough: `ESC P tmux; <sequence with every ESC doubled> ESC \`.
 - **Socket:** connect to the Unix socket in `$TERSH_SOCKET` and write one JSON
   object per line. Each line gets a one-line reply: `{"ok":true}` or
-  `{"ok":false,"error":"..."}`. Use the socket for large payloads, or when you
+  `{"ok":false,"error":"...","code":"RCH-001"}` (codes are listed in
+  [errors.md](errors.md)). Use the socket for large payloads, or when you
   must know a card is placed before you print more. The socket only
   accepts the user's own connections (mode `0600`).
 
@@ -33,17 +34,17 @@ Setting `rich.osc = false` makes tersh accept cards only from the socket. Then
 }
 ```
 
-| Field    | Meaning                                                                                                                    |
-| -------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `op`     | `show` (default), `update`, `move`, `close`, `clear`, `info` (socket only: returns the grid size and cursor)               |
-| `id`     | Card id. `show` with an existing id replaces that card. Omit it for a generated id.                                        |
-| `kind`   | Renderer: `text`, `json`, `markdown`, `image`, `video`, `svg`, `html`, `plotly`, `notebook`, `output`, or a plugin's kind. |
-| `data`   | Content (see below).                                                                                                       |
-| `title`  | Title shown in the card's header.                                                                                          |
-| `chrome` | `false` hides the header and frame.                                                                                        |
-| `hidden` | `true` keeps the card but doesn't draw it (e.g. its line scrolled out of an editor window).                                |
-| `anchor` | Where the card goes (see below). `update` and `move` without `anchor` keep the current one.                                |
-| `screen` | For `clear`: only clear `"primary"` or `"alt"` cards.                                                                      |
+| Field    | Meaning                                                                                                                                                             |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `op`     | `show` (default), `update`, `move`, `close`, `clear`, `info` (socket only: returns the grid size and cursor), `stats` (socket only: returns the profiling counters) |
+| `id`     | Card id. `show` with an existing id replaces that card. Omit it for a generated id.                                                                                 |
+| `kind`   | Renderer: `text`, `json`, `markdown`, `image`, `video`, `svg`, `html`, `plotly`, `notebook`, `output`, or a plugin's kind.                                          |
+| `data`   | Content (see below).                                                                                                                                                |
+| `title`  | Title shown in the card's header.                                                                                                                                   |
+| `chrome` | `false` hides the header and frame.                                                                                                                                 |
+| `hidden` | `true` keeps the card but doesn't draw it (e.g. its line scrolled out of an editor window).                                                                         |
+| `anchor` | Where the card goes (see below). `update` and `move` without `anchor` keep the current one.                                                                         |
+| `screen` | For `clear`: only clear `"primary"` or `"alt"` cards.                                                                                                               |
 
 `update` replaces `data` (and any other fields given). It creates the card if
 it doesn't exist and `kind` is given. `move` changes only `anchor` and `hidden`.

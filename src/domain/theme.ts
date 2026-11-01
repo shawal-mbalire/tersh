@@ -17,16 +17,16 @@ export const isLight = (color: string) => luminance(color) > 0.4;
 
 /** CSS custom properties for a config. Cards, toasts and plugins style themselves with these. */
 export function cssVariables(config: Config): Record<string, string> {
-  const { theme, window, font } = config;
+  const { theme, window: frame, font } = config;
   const [r, g, b] = parseHex(theme.background) ?? [0, 0, 0];
   const vars: Record<string, string> = {
-    "--bg": `rgba(${r}, ${g}, ${b}, ${Math.min(1, Math.max(0, window.opacity))})`,
+    "--bg": `rgba(${r}, ${g}, ${b}, ${Math.min(1, Math.max(0, frame.opacity))})`,
     "--bg-solid": theme.background,
     "--fg": theme.foreground,
     "--cursor": theme.cursor,
     "--selection": theme.selection,
     "--accent": theme.accent,
-    "--padding": `${window.padding}px`,
+    "--padding": `${frame.padding}px`,
     "--font-family": withSymbols(font.family),
     "--font-size": `${font.size}px`,
   };

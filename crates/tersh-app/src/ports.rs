@@ -5,12 +5,12 @@
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::{Instant, SystemTime};
+use std::time::{Duration, Instant, SystemTime};
 
-use anyhow::Result;
 use serde_json::Value;
 use tersh_domain::config::Cursor;
 use tersh_domain::rich::AnchorContext;
+use tersh_domain::error::Result;
 use tersh_domain::{Config, Frame, Rgb, TermEvent, WindowSize};
 
 // ---- output to the UI -----------------------------------------------------------
@@ -21,6 +21,15 @@ pub trait Sink: Send + Sync + 'static {
     /// A rich-media message with its anchor resolved (see `tersh_domain::rich::resolve_anchor`).
     fn rich(&self, message: Value);
     fn event(&self, event: TermEvent);
+}
+
+// ---- time -------------------------------------------------------------------------
+
+/// The use cases' only source of time, so tests can control it. Monotonic:
+/// used for frame pacing and for measuring how long things take.
+pub trait TimePort: Send + Sync {
+    fn now(&self) -> Instant;
+    fn sleep(&self, duration: Duration);
 }
 
 // ---- pseudo-terminals ------------------------------------------------------------
@@ -58,6 +67,11 @@ pub trait PtyControl: Send {
     fn resize(&self, size: WindowSize) -> Result<()>;
     /// Leader of the terminal's foreground process group (the shell when it is at its prompt).
     fn foreground_pid(&self) -> Option<u32>;
+    /// Stop using the terminal: a blocked or later read of the process's
+    /// `output` returns end-of-file, and writes to its `input` fail. Called
+    /// when the session ends, because a background program can keep the
+    /// terminal open after the shell has gone.
+    fn hangup(&self);
 }
 
 pub trait ChildProcess: Send {
@@ -82,6 +96,10 @@ pub trait ProcessInspector: Send + Sync {
     fn name(&self, pid: u32) -> Option<String>;
     /// Current working directory.
     fn cwd(&self, pid: u32) -> Option<PathBuf>;
+    /// Resident memory in bytes, where the platform reports it.
+    fn memory(&self, _pid: u32) -> Option<u64> {
+        None
+    }
 }
 
 // ---- terminal emulation ------------------------------------------------------------
@@ -103,6 +121,18 @@ pub trait TermHost: Send + Sync {
     /// A palette colour, for colour queries (0-255, 256 fg, 257 bg, 258 cursor).
     fn color(&self, index: usize) -> Rgb;
     fn window_size(&self) -> WindowSize;
+    /// A measurement of the emulator itself, from the [`crate::instrumented`]
+    /// decorator. Hosts that don't profile ignore it.
+    fn measured(&self, _measurement: Measurement) {}
+}
+
+/// How long an emulator call took.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Measurement {
+    /// Parsing program output ([`Emulator::advance`]).
+    Advance(Duration),
+    /// Building a frame ([`Emulator::frame`]).
+    Frame(Duration),
 }
 
 /// Scrolling the viewport through history.
@@ -137,6 +167,12 @@ pub trait EmulatorFactory: Send + Sync {
     fn create(&self, options: &EmulatorOptions, host: Arc<dyn TermHost>) -> Box<dyn Emulator>;
 }
 
+impl<F: EmulatorFactory + ?Sized> EmulatorFactory for &F {
+    fn create(&self, options: &EmulatorOptions, host: Arc<dyn TermHost>) -> Box<dyn Emulator> {
+        (**self).create(options, host)
+    }
+}
+
 // ---- user settings ------------------------------------------------------------------
 
 /// A user plugin's source.
@@ -160,7 +196,7 @@ pub trait ConfigStore: Send + Sync {
     /// Load and parse the config; problems become warnings.
     fn load(&self) -> Config;
     /// Create the config file from the commented template if it doesn't exist.
-    fn ensure(&self) -> std::io::Result<()>;
+    fn ensure(&self) -> Result<()>;
     /// The user stylesheet, if any.
     fn style(&self) -> Option<String>;
     /// Every theme name that can be used.

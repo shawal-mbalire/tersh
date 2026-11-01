@@ -33,17 +33,19 @@ three OSes; `ci desktop` = the Tauri build and clippy on Linux.
 
 ## Launch and window (WIN)
 
-| ID     | Feature                                                                          | How to check                                                                    | Linux | macOS | Windows | Automated by |
-| ------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | :---: | :---: | :-----: | ------------ |
-| WIN-01 | Launches from the OS launcher like a normal app                                  | Linux launcher / macOS Spotlight and Dock / Windows Start                       |  ✅   |  ⚠️   |   🧪    |              |
-| WIN-02 | Launches from a shell: `tersh`, `tersh --cwd DIR --input TEXT --size WxH`        | The window opens in DIR at the given size, and TEXT is typed into the shell     |  ✅   |  🧪   |   🧪    | cargo (cli)  |
-| WIN-03 | `tersh --version` / `--help` print to the console                                | Run from a terminal                                                             |  ✅   |  🧪   |   ⚠️    | cargo (cli)  |
-| WIN-04 | Translucent background (`window.opacity`)                                        | `opacity = 0.7`: the desktop shows through                                      |  ✅   |  ⚠️   |   🧪    |              |
-| WIN-05 | Backdrop blur (`window.blur`)                                                    | macOS vibrancy, Windows acrylic, Linux from the compositor (e.g. Hyprland blur) |  ✅   |  🧪   |   🧪    |              |
-| WIN-06 | Frameless window: drag by the top padding, resize from the edges                 | Drag and resize                                                                 |  ✅   |  🧪   |   🧪    |              |
-| WIN-07 | Starts in the home directory when launched from the GUI                          | Launch from the launcher; `pwd`                                                 |  ✅   |  🧪   |   🧪    |              |
-| WIN-08 | The shell gets a full user environment (PATH, profile) when started from the GUI | Launch from the launcher; `echo $PATH` includes Homebrew, `~/.local/bin`, etc.  |  ✅   |  ⚠️   |   🧪    |              |
-| WIN-09 | Window title follows the shell / program title                                   | `printf '\e]0;hello\a'`                                                         |  ✅   |  🧪   |   🧪    |              |
+| ID     | Feature                                                                          | How to check                                                                    | Linux | macOS | Windows | Automated by   |
+| ------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | :---: | :---: | :-----: | -------------- |
+| WIN-01 | Launches from the OS launcher like a normal app                                  | Linux launcher / macOS Spotlight and Dock / Windows Start                       |  ✅   |  ⚠️   |   🧪    |                |
+| WIN-02 | Launches from a shell: `tersh`, `tersh --cwd DIR --input TEXT --size WxH`        | The window opens in DIR at the given size, and TEXT is typed into the shell     |  ✅   |  🧪   |   🧪    | cargo (cli)    |
+| WIN-03 | `tersh --version` / `--help` print to the console                                | Run from a terminal                                                             |  ✅   |  🧪   |   ⚠️    | cargo (cli)    |
+| WIN-04 | Translucent background (`window.opacity`)                                        | `opacity = 0.7`: the desktop shows through                                      |  ✅   |  ⚠️   |   🧪    |                |
+| WIN-05 | Backdrop blur (`window.blur`)                                                    | macOS vibrancy, Windows acrylic, Linux from the compositor (e.g. Hyprland blur) |  ✅   |  🧪   |   🧪    |                |
+| WIN-06 | Frameless window: drag by the top padding, resize from the edges                 | Drag and resize                                                                 |  ✅   |  🧪   |   🧪    |                |
+| WIN-07 | Starts in the home directory when launched from the GUI                          | Launch from the launcher; `pwd`                                                 |  ✅   |  🧪   |   🧪    |                |
+| WIN-08 | The shell gets a full user environment (PATH, profile) when started from the GUI | Launch from the launcher; `echo $PATH` includes Homebrew, `~/.local/bin`, etc.  |  ✅   |  ⚠️   |   🧪    |                |
+| WIN-09 | Window title follows the shell / program title                                   | `printf '\e]0;hello\a'`                                                         |  ✅   |  🧪   |   🧪    |                |
+| WIN-10 | The window appears only once the first frame is painted (no empty frame)         | Launch: the first thing shown is the prompt                                     |  ✅   |  🧪   |   🧪    |                |
+| WIN-11 | `exit` closes the window at once; the shell is hung up and its socket removed    | `exit`; `ls $XDG_RUNTIME_DIR/tersh-*` shows no leftover socket                  |  ✅   |  🧪   |   🧪    | cargo (memory) |
 
 ## Terminal (TERM)
 
@@ -65,18 +67,30 @@ three OSes; `ci desktop` = the Tauri build and clippy on Linux.
 | TERM-14 | Bell flashes the window                                                                 | `printf '\a'`                                                                     |  ✅   |  🧪   |   🧪    |                            |
 | TERM-15 | Resize reflows and resizes the PTY (`stty size` follows)                                | Resize the window; `stty size`                                                    |  ✅   |  🧪   |   🧪    |                            |
 | TERM-16 | Keystroke latency: echo is never delayed; heavy output is coalesced (~240 Hz)           | Type while `yes` runs in another pane                                             |  ✅   |  🧪   |   🧪    |                            |
+| TERM-17 | Input is written in order on its own thread: a huge paste never freezes the window      | Paste 10 MB into `sleep 60`; the window stays responsive                          |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes) |
 
 ## Rendering (REN)
 
-| ID     | Feature                                                                             | How to check                                                         | Linux | macOS | Windows | Automated by   |
-| ------ | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------- | :---: | :---: | :-----: | -------------- |
-| REN-01 | Bundled Sono font (default) and any `font.family`                                   | Change `font.family`; it applies live                                |  ✅   |  🧪   |   🧪    | vitest (fonts) |
-| REN-02 | Nerd Font icons with any font (bundled symbols)                                     | `echo '        '`                                                    |  ✅   |  🧪   |   🧪    | vitest (fonts) |
-| REN-03 | Powerline separators and block elements fill the cell at any `line_height`          | tmux catppuccin status bar: rounded caps are solid; `printf '█▀▄▌▐'` |  ✅   |  🧪   |   🧪    |                |
-| REN-04 | Zoom in, out and reset                                                              | Ctrl/Cmd + `=` / `-` / `0`                                           |  ✅   |  🧪   |   🧪    |                |
-| REN-05 | Cursor shapes (block, beam, underline), blink, and changes from programs (DECSCUSR) | `printf '\e[6 q'` gives a beam                                       |  ✅   |  🧪   |   🧪    |                |
-| REN-06 | Wide characters and emoji take two cells                                            | `echo '漢字 👍'`                                                     |  ✅   |  🧪   |   🧪    |                |
-| REN-07 | Only changed rows repaint; a full-screen `cat` of a large file stays smooth         | `cat` a 50 MB log                                                    |  ✅   |  🧪   |   🧪    |                |
+| ID     | Feature                                                                               | How to check                                                           | Linux | macOS | Windows | Automated by      |
+| ------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | :---: | :---: | :-----: | ----------------- |
+| REN-01 | Bundled Sono font (default) and any `font.family`                                     | Change `font.family`; it applies live                                  |  ✅   |  🧪   |   🧪    | vitest (fonts)    |
+| REN-02 | Nerd Font icons with any font (bundled symbols)                                       | `echo '        '`                                                      |  ✅   |  🧪   |   🧪    | vitest (fonts)    |
+| REN-03 | Powerline separators and block elements fill the cell at any `line_height`            | tmux catppuccin status bar: rounded caps are solid; `printf '█▀▄▌▐'`   |  ✅   |  🧪   |   🧪    |                   |
+| REN-04 | Zoom in, out and reset                                                                | Ctrl/Cmd + `=` / `-` / `0`                                             |  ✅   |  🧪   |   🧪    |                   |
+| REN-05 | Cursor shapes (block, beam, underline), blink, and changes from programs (DECSCUSR)   | `printf '\e[6 q'` gives a beam                                         |  ✅   |  🧪   |   🧪    |                   |
+| REN-06 | Wide characters and emoji take two cells                                              | `echo '漢字 👍'`                                                       |  ✅   |  🧪   |   🧪    |                   |
+| REN-07 | Only changed rows repaint; a full-screen `cat` of a large file stays smooth           | `cat` a 50 MB log                                                      |  ✅   |  🧪   |   🧪    |                   |
+| REN-08 | Text stays on the cell grid even when the font's letters differ in width (Sono's `i`) | In Claude Code, type a long line: the cursor sits right after the text |  ✅   |  🧪   |   🧪    | vitest (renderer) |
+
+## Performance and memory (PERF)
+
+| ID      | Feature                                                                                                        | How to check                                                               | Linux | macOS | Windows | Automated by                    |
+| ------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | :---: | :---: | :-----: | ------------------------------- |
+| PERF-01 | Profiler overlay (`toggle_profiler`, Ctrl+Shift+P): paint time, key-to-screen latency, frames, memory          | Press it, type, run `seq 100000`                                           |  ✅   |  🧪   |   🧪    | vitest (profile)                |
+| PERF-02 | Session counters over the socket: `{"op":"stats"}`; `tersh.profile()` for plugins                              | `printf '{"op":"stats"}\n' \| socat - UNIX:$TERSH_SOCKET`                  |  ✅   |  🧪   |    —    | cargo (session_with_fakes)      |
+| PERF-03 | Frames that change nothing are not sent to the page                                                            | Profiler: "unchanged" counts up while a program redraws the same screen    |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes)      |
+| PERF-04 | No leaks: heap is flat with full scrollback; closed sessions free everything, even if the shell ignores SIGHUP | `cargo test -p tersh-adapters --test memory`                               |  ✅   |  🧪   |   🧪    | cargo (memory), vitest (memory) |
+| PERF-05 | Replay a recording through the emulator to time parsing and frame building                                     | `cargo run --release -p tersh-adapters --example replay -- out.raw 120 40` |  ✅   |  🧪   |   🧪    |                                 |
 
 ## Configuration and themes (CONF)
 

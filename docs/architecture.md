@@ -23,27 +23,45 @@ UI toolkit. Everything outside connects through interfaces called ports.
 
 ## Rust crates
 
-| Crate            | Layer           | Contents                                                                                                                                                                                                                                                                                                                                                                                                         |
-| ---------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `tersh-domain`   | domain          | Config model and parsing, theme resolution (24 built-in themes), the OSC 7701 scanner and anchor rules, frame and palette types, version comparison and the restart-when-safe rule. Depends only on serde/toml/base64. User theme files arrive through the `ThemeSource` trait.                                                                                                                                  |
-| `tersh-app`      | application     | Ports (`PtySystem`, `EmulatorFactory`, `TermHost`, `ConfigStore`, `Sink`) and the use cases: `Session` (moves bytes between PTY, emulator and UI, dispatches rich messages, exposes a `RichInbox`) and `Settings` (snapshot and change detection), and `update` (check and install releases). Further ports: `ProcessInspector`, `ReleaseSource`, `Installer`, `Watchable`.                                      |
-| `tersh-adapters` | driven adapters | `NativePty` (portable-pty), `AlacrittyEmulators` (frame building, scroll tracking), `socket` (newline-JSON server on `$TERSH_SOCKET`), `FsConfigStore` (config, themes, style.css, plugins), `SystemFontDirs`, `SystemProcesses` (foreground program, cwd), `GithubReleases` and `InstallScript` (updates), `AppBinary` (watching and relaunching the executable). `spawn_local` wires the native ones together. |
-| `src-tauri`      | driving adapter | The desktop window and composition root: Tauri commands and channels, live config reload, the sandboxed `tersh-card:` protocol for HTML cards.                                                                                                                                                                                                                                                                   |
-| `tersh-show`     | driving adapter | A CLI that speaks the rich protocol to a running terminal, and `--serve`, an HTTP bridge to it.                                                                                                                                                                                                                                                                                                                  |
+| Crate            | Layer           | Contents                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------- | --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tersh-domain`   | domain          | Config model and rules, theme resolution (24 built-in themes), the OSC 7701 scanner and anchor rules, frame and palette types, version comparison and the restart-when-safe rule, and `AppError` with its registered codes. Depends only on serde/serde_json/base64; file formats are decoded by adapters. User themes arrive already decoded through the `ThemeSource` trait.                                                                                                                                                |
+| `tersh-app`      | application     | Ports (`PtySystem`, `EmulatorFactory`, `TermHost`, `ConfigStore`, `Sink`) and the use cases: `Session` (moves bytes between PTY, emulator and UI, dispatches rich messages, exposes a `RichInbox`) and `Settings` (snapshot and change detection), and `update` (check and install releases). Further ports: `ProcessInspector`, `ReleaseSource`, `Installer`, `Watchable`, and `TimePort`, the use cases' only clock. `instrumented::Instrumented` is a decorator that times any `EmulatorFactory` for the profiler.         |
+| `tersh-adapters` | driven adapters | `NativePty` (portable-pty), `AlacrittyEmulators` (frame building, scroll tracking), `socket` (newline-JSON server on `$TERSH_SOCKET`), `FsConfigStore` (config, themes, style.css, plugins), `SystemFontDirs`, `SystemProcesses` (foreground program, cwd), `GithubReleases` and `InstallScript` (updates), `AppBinary` (watching and relaunching the executable), `SystemClock`, `toml_format` (decoding config and theme files). `spawn_local` wires the native ones together, with the emulator wrapped in `Instrumented`. |
+| `src-tauri`      | driving adapter | The desktop window and composition root: Tauri commands and channels, live config reload, the sandboxed `tersh-card:` protocol for HTML cards. `environment.rs` reads the process environment once and passes it to the adapters.                                                                                                                                                                                                                                                                                             |
+| `tersh-show`     | driving adapter | A CLI that speaks the rich protocol to a running terminal, and `--serve`, an HTTP bridge to it. Standalone: it depends on no tersh crate, only on the protocol.                                                                                                                                                                                                                                                                                                                                                               |
 
 Dependencies only point inward: `tersh-domain` ← `tersh-app` ← `tersh-adapters`
 ← `src-tauri`. Cargo enforces this, because a crate can't use one it doesn't
 depend on.
 
+Rules inside the layers, checked by `crates/tersh-adapters/tests/architecture.rs`:
+
+- **The domain does no I/O,** not even logging: the OSC scanner reports a
+  dropped oversized payload as `Chunk::Oversized` and the session logs it.
+- **Only entry points read the environment.** `src-tauri/src/environment.rs`
+  reads it once; adapters get what they need as arguments (`AppBinary::locate`,
+  `SystemFontDirs::new`, `InstallScript::new`, `unbundled`).
+- **Time comes through `TimePort`.** The session paces frames on it. How long
+  parsing and frame building take is measured outside the session, by the
+  `Instrumented` decorator the entry point wraps around the emulator.
+- **Expected failures are `AppError`s** with a code from `docs/errors.md`.
+  Adapters translate library errors at the boundary and keep them as the
+  cause; bugs panic. Commands and socket replies carry the rendered text,
+  `message: cause (CODE)`.
+
 ## Frontend (`src/`)
 
-| Directory        | Layer       | Contents                                                                                                                          |
-| ---------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `domain/`        | domain      | Shared types, key and mouse encoding, palette resolution, keybinding tables, theme-to-CSS-variable mapping, card anchor geometry. |
-| `ports/`         | port        | `Backend`: session I/O, settings, clipboard, window, card documents.                                                              |
-| `adapters/tauri` | adapter     | `TauriBackend`, the only code that imports `@tauri-apps/*`.                                                                       |
-| `ui/`            | UI          | Canvas grid renderer, terminal controller, card manager, plugin API and loader, style sheet.                                      |
-| `main.ts`        | composition | Creates `TauriBackend` and hands it to the UI.                                                                                    |
+The page is a hexagon of its own, with the same layers:
+
+| Directory        | Layer           | Contents                                                                                                                                                                                                                 |
+| ---------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `domain/`        | domain          | Shared types, key and mouse encoding, palette resolution, keybinding tables, theme-to-CSS-variable mapping, card anchor geometry, selection geometry, wheel handling, profiler maths, the plugin event types.            |
+| `ports/`         | ports           | `Backend` (the host: session I/O, settings, clipboard, window, card documents) and `Screen` (what the terminal draws on).                                                                                                |
+| `app/`           | use case        | `TerminalApp`: what keys, mouse reports, actions and session events mean; the action and keybinding registries; zoom; telling the host the window is ready. Talks only to `Backend` and `Screen`; tested with fakes.     |
+| `adapters/dom`   | driving adapter | The page: `DomScreen` (canvas renderer, selection, cards, toasts) implements `Screen` and turns DOM events into calls on `TerminalApp`. Also the profiler overlay, the plugin API and loader, fonts and the style sheet. |
+| `adapters/tauri` | driven adapter  | `TauriBackend`, the only code that imports `@tauri-apps/*`.                                                                                                                                                              |
+| `main.ts`        | composition     | Creates `TauriBackend` and `DomScreen`, wraps the backend in the profiler (`profiled`), and wires them to `TerminalApp`.                                                                                                 |
 
 The card renderers live in [`packages/cards`](../packages/cards) (`@tersh/cards`).
 It is a standalone package with no tersh dependencies, so web pages can use it
@@ -51,13 +69,15 @@ too. The app builds it from source through a Vite alias and plugs in its own
 `tersh-card:` document host.
 
 `src/__tests__/architecture.test.ts` fails the build if a layer imports one it
-shouldn't. For example, it fails if `ui/` imports Tauri or `domain/` imports
-`ui/`.
+shouldn't (for example `app/` importing an adapter, or the page importing
+Tauri), or if `domain/`, `ports/` or `app/` touch the DOM.
 
 ## Testing at each layer
 
 - **Domain:** plain unit tests (`cargo test -p tersh-domain`, and the
   `domain/` tests in vitest).
+- **Page use case:** `src/__tests__/app.test.ts` drives `TerminalApp` with a
+  fake backend and screen.
 - **Application:** `crates/tersh-app/tests/session_with_fakes.rs` drives a
   `Session` with an in-memory PTY and emulator. No processes or terminal
   library are involved.

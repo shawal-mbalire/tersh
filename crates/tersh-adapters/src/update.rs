@@ -5,8 +5,10 @@
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-use anyhow::{bail, Context, Result};
 use tersh_app::ports::{Installer, ReleaseSource};
+use tersh_domain::error::{AppError, Code, Result};
+
+use crate::EnvVars;
 
 pub const REPO: &str = "shawal-mbalire/tersh";
 
@@ -28,12 +30,17 @@ impl ReleaseSource for GithubReleases {
         let output = Command::new("curl")
             .args(["-fsSL", "-H", "Accept: application/vnd.github+json", &url])
             .output()
-            .context("running curl (is it installed?)")?;
+            .map_err(|e| AppError::new(Code::ReleaseLookup, "could not run curl").because(e))?;
         if !output.status.success() {
-            bail!("could not reach {url}: {}", String::from_utf8_lossy(&output.stderr).trim());
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            return Err(AppError::new(Code::ReleaseLookup, format!("could not reach {url}: {stderr}")));
         }
-        let release: serde_json::Value = serde_json::from_slice(&output.stdout).context("unexpected reply from GitHub")?;
-        release["tag_name"].as_str().map(String::from).context("the latest release has no tag")
+        let release: serde_json::Value = serde_json::from_slice(&output.stdout)
+            .map_err(|e| AppError::new(Code::ReleaseReply, "unexpected reply from GitHub").because(e))?;
+        match release["tag_name"].as_str() {
+            Some(tag) => Ok(tag.to_string()),
+            None => Err(AppError::new(Code::ReleaseReply, "the latest release has no tag")),
+        }
     }
 }
 
@@ -43,11 +50,13 @@ impl ReleaseSource for GithubReleases {
 #[derive(Debug, Clone)]
 pub struct InstallScript {
     pub repo: String,
+    /// This process's environment, cleaned of the bundle before running the installer.
+    pub env: EnvVars,
 }
 
-impl Default for InstallScript {
-    fn default() -> Self {
-        Self { repo: REPO.into() }
+impl InstallScript {
+    pub fn new(env: EnvVars) -> Self {
+        Self { repo: REPO.into(), env }
     }
 }
 
@@ -75,12 +84,12 @@ impl Installer for InstallScript {
         let mut command = self.command(tag);
         // Without the bundle's PATH, the installer can't mistake the app's own
         // binary for another copy of tersh to replace.
-        let status = crate::unbundled(&mut command)
+        let status = crate::unbundled(&mut command, &self.env)
             .stdin(Stdio::null())
             .status()
-            .context("running the installer")?;
+            .map_err(|e| AppError::new(Code::InstallFailed, "could not run the installer").because(e))?;
         if !status.success() {
-            bail!("the installer failed ({status})");
+            return Err(AppError::new(Code::InstallFailed, format!("the installer failed ({status})")));
         }
         Ok(())
     }

@@ -8,20 +8,20 @@
 
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
 use serde_json::Value;
 use tersh_domain::config::Cursor;
 use tersh_domain::rich::{self, AnchorContext, Chunk, OscScanner};
+use tersh_domain::error::{AppError, Code, Result};
 use tersh_domain::update::Foreground;
-use tersh_domain::{Config, Info, Palette, Rgb, TermEvent, WindowSize};
+use tersh_domain::{Config, Frame, Info, Palette, Rgb, Stats, TermEvent, WindowSize};
 
-use crate::ports::{
+use crate::ports::{Measurement, TimePort, 
     Emulator, EmulatorFactory, EmulatorOptions, ProcessInspector, ProcessKiller, PtyControl, PtySystem, Scroll, Sink,
     SpawnRequest, TermHost,
 };
@@ -29,6 +29,10 @@ use crate::ports::{
 /// Minimum time between frames during heavy output (~240 Hz). The first frame
 /// after a quiet period is sent immediately, so keystroke echo is never delayed.
 const FRAME_INTERVAL: Duration = Duration::from_millis(4);
+/// How much program output to read at once.
+const READ_BUFFER: usize = 64 * 1024;
+/// How long the render thread sleeps when nothing is pending; any output wakes it.
+const IDLE_WAIT: Duration = Duration::from_secs(3600);
 
 /// Variables a new terminal must not inherit from whatever launched the app:
 /// it is not inside that tmux, nor inside another tersh.
@@ -42,8 +46,10 @@ pub struct SessionOptions {
     /// `None` starts in the home directory.
     pub cwd: Option<PathBuf>,
     pub env: Vec<(String, String)>,
-    /// The environment the shell would inherit. Paths into tersh's own
-    /// bundle (the AppImage) are removed from it before the shell starts.
+    /// The environment the shell would inherit, filled in by the entry point
+    /// (the only place that reads the process environment). Paths into
+    /// tersh's own bundle (the AppImage) are removed from it before the shell
+    /// starts.
     pub inherited_env: Vec<(String, String)>,
     pub cols: u16,
     pub rows: u16,
@@ -65,7 +71,7 @@ impl SessionOptions {
             args: config.args.clone(),
             cwd: None,
             env: config.env.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
-            inherited_env: std::env::vars().collect(),
+            inherited_env: Vec::new(),
             cols,
             rows,
             cell_width: 0,
@@ -87,22 +93,78 @@ impl SessionOptions {
 pub struct Ports<'a> {
     pub pty: &'a dyn PtySystem,
     pub emulator: &'a dyn EmulatorFactory,
+    pub clock: Arc<dyn TimePort>,
 }
 
-type Input = Arc<Mutex<Box<dyn Write + Send>>>;
+/// Profiling counters (see [`Stats`]); plain atomic adds on the hot paths.
+#[derive(Default)]
+struct Counters {
+    output_bytes: AtomicU64,
+    output_reads: AtomicU64,
+    parse_us: AtomicU64,
+    frames_built: AtomicU64,
+    frames_sent: AtomicU64,
+    frames_skipped: AtomicU64,
+    rows_sent: AtomicU64,
+    build_us: AtomicU64,
+    build_max_us: AtomicU64,
+    input_bytes: AtomicU64,
+    input_writes: AtomicU64,
+    input_pending: AtomicU64,
+    history: AtomicU64,
+}
+
+fn add(counter: &AtomicU64, n: u64) {
+    counter.fetch_add(n, Ordering::Relaxed);
+}
+
+fn micros(d: Duration) -> u64 {
+    d.as_micros().try_into().unwrap_or(u64::MAX)
+}
 
 /// Answers the emulator's questions (device queries, colours, size) and forwards its events.
 struct Host {
-    input: Input,
+    /// Bytes for the program, written in order by the `tersh-pty-write` thread
+    /// so a program that isn't reading (a large paste) never blocks the caller.
+    input: mpsc::Sender<Vec<u8>>,
+    counters: Arc<Counters>,
     sink: Arc<dyn Sink>,
     palette: Mutex<Palette>,
     size: Mutex<WindowSize>,
 }
 
+impl Host {
+    /// Queue bytes for the program. False once the program's input has closed.
+    fn send(&self, bytes: &[u8]) -> bool {
+        if bytes.is_empty() {
+            return true;
+        }
+        add(&self.counters.input_pending, bytes.len() as u64);
+        self.input.send(bytes.to_vec()).is_ok()
+    }
+}
+
+/// Write queued input to the program until the queue or the program's input closes.
+fn write_loop(mut output: Box<dyn Write + Send>, queue: mpsc::Receiver<Vec<u8>>, counters: Arc<Counters>) {
+    while let Ok(mut bytes) = queue.recv() {
+        // Write whatever else is already queued in the same call.
+        while let Ok(more) = queue.try_recv() {
+            bytes.extend_from_slice(&more);
+        }
+        let n = bytes.len() as u64;
+        let written = output.write_all(&bytes).and_then(|_| output.flush());
+        counters.input_pending.fetch_sub(n, Ordering::Relaxed);
+        add(&counters.input_bytes, n);
+        add(&counters.input_writes, 1);
+        if written.is_err() {
+            break;
+        }
+    }
+}
+
 impl TermHost for Host {
     fn reply(&self, text: &str) {
-        let mut input = lock(&self.input);
-        let _ = input.write_all(text.as_bytes()).and_then(|_| input.flush());
+        self.send(text.as_bytes());
     }
 
     fn event(&self, event: TermEvent) {
@@ -115,6 +177,18 @@ impl TermHost for Host {
 
     fn window_size(&self) -> WindowSize {
         *lock(&self.size)
+    }
+
+    fn measured(&self, measurement: Measurement) {
+        let counters = &self.counters;
+        match measurement {
+            Measurement::Advance(took) => add(&counters.parse_us, micros(took)),
+            Measurement::Frame(took) => {
+                let took = micros(took);
+                add(&counters.build_us, took);
+                counters.build_max_us.fetch_max(took, Ordering::Relaxed);
+            },
+        }
     }
 }
 
@@ -133,6 +207,8 @@ struct Shared {
     wake: mpsc::Sender<()>,
     closed: AtomicBool,
     options: SessionOptions,
+    clock: Arc<dyn TimePort>,
+    started: Instant,
 }
 
 /// A running program. Dropping it kills the program.
@@ -157,6 +233,13 @@ impl RichInbox {
 
     pub fn is_open(&self) -> bool {
         self.0.upgrade().is_some_and(|s| !s.closed.load(Ordering::SeqCst))
+    }
+
+    /// Whether everything the session held (its threads, screen and
+    /// scrollback) has been freed. Becomes true shortly after the session is
+    /// dropped; used to check that sessions don't leak.
+    pub fn is_released(&self) -> bool {
+        self.0.strong_count() == 0
     }
 }
 
@@ -188,15 +271,21 @@ impl Session {
             cell_width: options.cell_width,
             cell_height: options.cell_height,
         };
-        let process = ports.pty.spawn(&request).context("starting the shell")?;
+        let process = ports.pty.spawn(&request)?;
         log::debug!("started {}", process.program);
         let mut output = process.output;
         let mut child = process.child;
+        let counters = Arc::new(Counters::default());
+        let (input, input_rx) = mpsc::channel();
+        let writer = process.input;
+        let c = counters.clone();
+        start_thread("tersh-pty-write", move || write_loop(writer, input_rx, c))?;
         let killer = child.killer();
         let shell_pid = child.pid();
 
         let host = Arc::new(Host {
-            input: Arc::new(Mutex::new(process.input)),
+            input,
+            counters,
             sink,
             palette: Mutex::new(options.palette.clone()),
             size: Mutex::new(WindowSize {
@@ -218,26 +307,34 @@ impl Session {
             wake,
             closed: AtomicBool::new(false),
             options,
+            started: ports.clock.now(),
+            clock: ports.clock,
         });
 
-        let s = shared.clone();
-        thread::Builder::new().name("tersh-pty-read".into()).spawn(move || {
-            let mut buf = vec![0u8; 64 * 1024];
+        // The reader and the wait thread hold the session weakly: either can
+        // block for as long as something keeps the terminal or the program
+        // alive, and must not keep a dropped session's memory with it.
+        let weak = Arc::downgrade(&shared);
+        start_thread("tersh-pty-read", move || {
+            let mut buf = vec![0u8; READ_BUFFER];
             loop {
-                match output.read(&mut buf) {
+                let n = match output.read(&mut buf) {
                     Ok(0) | Err(_) => break,
-                    Ok(n) => s.process(&buf[..n]),
-                }
+                    Ok(n) => n,
+                };
+                let Some(s) = weak.upgrade() else { break };
+                s.process(&buf[..n]);
                 let _ = s.wake.send(());
             }
         })?;
 
         let s = shared.clone();
-        thread::Builder::new().name("tersh-render".into()).spawn(move || s.render_loop(wake_rx))?;
+        start_thread("tersh-render", move || s.render_loop(wake_rx))?;
 
-        let s = shared.clone();
-        thread::Builder::new().name("tersh-wait".into()).spawn(move || {
+        let weak = Arc::downgrade(&shared);
+        start_thread("tersh-wait", move || {
             let code = child.wait();
+            let Some(s) = weak.upgrade() else { return };
             s.closed.store(true, Ordering::SeqCst);
             let _ = s.wake.send(());
             s.host.sink.event(TermEvent::Exit { code });
@@ -269,9 +366,9 @@ impl Session {
                 let _ = self.shared.wake.send(());
             }
         }
-        let mut input = lock(&self.shared.host.input);
-        input.write_all(bytes)?;
-        input.flush()?;
+        if !self.shared.host.send(bytes) {
+            return Err(AppError::new(Code::InputClosed, "the program's input is closed"));
+        }
         Ok(())
     }
 
@@ -309,6 +406,12 @@ impl Session {
         self.shared.info()
     }
 
+    /// Profiling counters since the session started (`memory_bytes` is left
+    /// for the caller, who knows how to measure its own process).
+    pub fn stats(&self) -> Stats {
+        self.shared.stats()
+    }
+
     /// What is in the foreground (see `tersh_domain::update::restart_decision`).
     pub fn foreground(&self, processes: &dyn ProcessInspector) -> Foreground {
         let pid = lock(&self.shared.control).foreground_pid();
@@ -344,6 +447,8 @@ impl Drop for Session {
     fn drop(&mut self) {
         self.shared.closed.store(true, Ordering::SeqCst);
         lock(&self.shared.killer).kill();
+        // A background program may still hold the terminal open; stop reading anyway.
+        lock(&self.shared.control).hangup();
         let _ = self.shared.wake.send(());
         // `guards` drop after this, once the program is gone.
     }
@@ -367,8 +472,12 @@ impl Shared {
                     messages.push((payload, emulator.anchor_context()));
                 },
                 Chunk::Payload(_) => {},
+                Chunk::Oversized => log::warn!("dropping rich payload larger than {} bytes", rich::MAX_PAYLOAD),
             });
         }
+        let counters = &self.host.counters;
+        add(&counters.output_bytes, bytes.len() as u64);
+        add(&counters.output_reads, 1);
         for (payload, ctx) in messages {
             let _ = self.dispatch(rich::decode_payload(&payload), ctx);
         }
@@ -377,20 +486,25 @@ impl Shared {
     fn handle_message(&self, line: &[u8]) -> Value {
         let message = rich::decode_payload(line);
         if let Ok(msg) = &message {
-            if msg.get("op").and_then(Value::as_str) == Some("info") {
-                let mut info = serde_json::to_value(self.info()).unwrap_or_default();
-                info["ok"] = Value::Bool(true);
-                return info;
+            let reply = match msg.get("op").and_then(Value::as_str) {
+                Some("info") => Some(serde_json::to_value(self.info())),
+                Some("stats") => Some(serde_json::to_value(self.stats())),
+                _ => None,
+            };
+            if let Some(reply) = reply {
+                let mut reply = reply.unwrap_or_default();
+                reply["ok"] = Value::Bool(true);
+                return reply;
             }
         }
         let ctx = lock(&self.state).emulator.anchor_context();
         match self.dispatch(message, ctx) {
             Ok(()) => serde_json::json!({ "ok": true }),
-            Err(error) => serde_json::json!({ "ok": false, "error": error }),
+            Err(error) => serde_json::json!({ "ok": false, "error": error, "code": error.code.as_str() }),
         }
     }
 
-    fn dispatch(&self, message: Result<Value, String>, ctx: AnchorContext) -> Result<(), String> {
+    fn dispatch(&self, message: Result<Value>, ctx: AnchorContext) -> Result<()> {
         match message {
             Ok(mut msg) => {
                 rich::resolve_anchor(&mut msg, &ctx);
@@ -398,7 +512,7 @@ impl Shared {
                 Ok(())
             },
             Err(error) => {
-                self.host.sink.event(TermEvent::RichError { error: error.clone() });
+                self.host.sink.event(TermEvent::RichError { error: error.to_string() });
                 Err(error)
             },
         }
@@ -420,27 +534,50 @@ impl Shared {
         }
     }
 
+    fn stats(&self) -> Stats {
+        let c = &self.host.counters;
+        let get = |counter: &AtomicU64| counter.load(Ordering::Relaxed);
+        Stats {
+            uptime_ms: (self.clock.now() - self.started).as_millis().try_into().unwrap_or(u64::MAX),
+            output_bytes: get(&c.output_bytes),
+            output_reads: get(&c.output_reads),
+            parse_us: get(&c.parse_us),
+            frames_built: get(&c.frames_built),
+            frames_sent: get(&c.frames_sent),
+            frames_skipped: get(&c.frames_skipped),
+            rows_sent: get(&c.rows_sent),
+            build_us: get(&c.build_us),
+            build_max_us: get(&c.build_max_us),
+            input_bytes: get(&c.input_bytes),
+            input_writes: get(&c.input_writes),
+            input_pending: get(&c.input_pending),
+            history: get(&c.history),
+            memory_bytes: None,
+        }
+    }
+
     fn render_loop(&self, wake: mpsc::Receiver<()>) {
-        let mut last_frame = Instant::now() - FRAME_INTERVAL;
+        let mut last_frame = self.clock.now() - FRAME_INTERVAL;
+        let mut last_sent: Option<Frame> = None;
         loop {
             // Wake for new output, or when a synchronized update times out.
             let deadline = lock(&self.state).emulator.sync_deadline();
-            let wait = deadline.map_or(Duration::from_secs(3600), |d| d.saturating_duration_since(Instant::now()));
+            let wait = deadline.map_or(IDLE_WAIT, |d| d.saturating_duration_since(self.clock.now()));
             match wake.recv_timeout(wait) {
                 Ok(()) | Err(RecvTimeoutError::Timeout) => {},
                 Err(RecvTimeoutError::Disconnected) => return,
             }
-            let since = last_frame.elapsed();
+            let since = self.clock.now() - last_frame;
             if since < FRAME_INTERVAL {
-                thread::sleep(FRAME_INTERVAL - since);
+                self.clock.sleep(FRAME_INTERVAL - since);
             }
             while wake.try_recv().is_ok() {}
 
-            let frame = {
+            let mut frame = {
                 let mut state = lock(&self.state);
                 let State { emulator, force_full, .. } = &mut *state;
                 if let Some(deadline) = emulator.sync_deadline() {
-                    if Instant::now() < deadline {
+                    if self.clock.now() < deadline {
                         // Mid synchronized update: wait for it to finish.
                         continue;
                     }
@@ -448,10 +585,24 @@ impl Shared {
                 }
                 let frame = emulator.frame(*force_full);
                 *force_full = false;
+                let counters = &self.host.counters;
+                add(&counters.frames_built, 1);
+                counters.history.store(frame.history as u64, Ordering::Relaxed);
                 frame
             };
-            last_frame = Instant::now();
-            self.host.sink.frame(frame);
+            last_frame = self.clock.now();
+            // Output that changed nothing visible (e.g. a redraw of identical
+            // text) needs no trip to the UI.
+            if last_sent.as_ref().is_none_or(|last| !unchanged(last, &frame)) {
+                let lines = std::mem::take(&mut frame.lines);
+                last_sent = Some(frame.clone());
+                frame.lines = lines;
+                add(&self.host.counters.frames_sent, 1);
+                add(&self.host.counters.rows_sent, frame.lines.len() as u64);
+                self.host.sink.frame(frame);
+            } else {
+                add(&self.host.counters.frames_skipped, 1);
+            }
 
             if self.closed.load(Ordering::SeqCst) {
                 return;
@@ -460,7 +611,26 @@ impl Shared {
     }
 }
 
+/// Whether `next` repaints nothing and moves nothing compared to `last`.
+fn unchanged(last: &Frame, next: &Frame) -> bool {
+    !next.full
+        && next.lines.is_empty()
+        && next.cursor == last.cursor
+        && next.mode == last.mode
+        && (next.cols, next.rows, next.alt) == (last.cols, last.rows, last.alt)
+        && (next.display_offset, next.history, next.scroll_base) == (last.display_offset, last.history, last.scroll_base)
+}
+
 /// Lock, recovering from poisoning: a panic elsewhere shouldn't freeze the terminal.
+/// Start a named thread for the session.
+fn start_thread(name: &str, body: impl FnOnce() + Send + 'static) -> Result<()> {
+    thread::Builder::new()
+        .name(name.into())
+        .spawn(body)
+        .map(drop)
+        .map_err(|e| AppError::new(Code::SessionStart, format!("could not start the {name} thread")).because(e))
+}
+
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|e| e.into_inner())
 }

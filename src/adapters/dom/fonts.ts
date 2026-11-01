@@ -1,7 +1,7 @@
 // Getting fonts ready before the grid is measured and painted.
 
-import { SYMBOLS_SAMPLE, splitFamilies, unquote, withSymbols } from "../domain/fonts";
-import type { Config } from "../domain/types";
+import { SYMBOLS_SAMPLE, splitFamilies, unquote, withSymbols } from "../../domain/fonts";
+import type { Config } from "../../domain/types";
 
 /** Load the configured text font and the bundled icon font. */
 export async function loadFonts({ family, size }: Config["font"]) {

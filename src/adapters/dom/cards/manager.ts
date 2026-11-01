@@ -1,5 +1,5 @@
 import type { CardInstance, CardRenderer } from "@tersh/cards";
-import { type Anchor, cardBox, type Geometry, isExpired, type RichMessage } from "../../domain/cards";
+import { type Anchor, cardBox, type Geometry, isExpired, type RichMessage } from "../../../domain/cards";
 
 export type { Anchor, RichMessage };
 export type { CardContext, CardInstance, CardRenderer } from "@tersh/cards";
