@@ -2,7 +2,7 @@
 
 use alacritty_terminal::event::EventListener;
 use alacritty_terminal::grid::Dimensions;
-use alacritty_terminal::index::{Column, Line};
+use alacritty_terminal::index::Line;
 use alacritty_terminal::term::cell::{Cell, Flags};
 use alacritty_terminal::term::color::Colors;
 use alacritty_terminal::term::{Term, TermDamage, TermMode};
@@ -75,16 +75,6 @@ pub fn build<T: EventListener>(term: &mut Term<T>, scroll_base: u64, force_full:
         display_offset,
         history: term.grid().history_size(),
         scroll_base,
-    }
-}
-
-/// Feed the characters of a grid line (negative lines are history) to `hasher`,
-/// without building a string. Used for scroll tracking.
-pub fn hash_row<T, H: std::hash::Hasher>(term: &Term<T>, line: i32, hasher: &mut H) {
-    let cols = term.columns();
-    let row = &term.grid()[Line(line)];
-    for x in 0..cols {
-        hasher.write_u32(row[Column(x)].c as u32);
     }
 }
 

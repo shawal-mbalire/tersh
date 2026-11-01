@@ -57,6 +57,12 @@ it doesn't exist and `kind` is given. `move` changes only `anchor` and `hidden`.
 | `cell`             | `row`, `col` (screen cells, 0-based), `rows`, `cols`                                   | A fixed screen position. On the alternate screen (Neovim, tmux) this is what editor integrations use.             |
 | `float`            | `top`, `left`, `width`, `height`: numbers are cells, strings are CSS lengths (`"10%"`) | Over the whole terminal, not tied to text.                                                                        |
 
+A `cursor` card follows the output by counting the lines that scroll off the
+top of the screen. Once the scrollback is full, tersh counts by recognising
+the newest history lines again after each read of output. A single read that
+scrolls more than 256 lines, or output that repeats in blocks of fewer than 16
+identical lines, can be undercounted, and the card then sits a little low.
+
 If `rows` is omitted, the card sizes itself to its content. Cards anchored on
 the alternate screen are removed when the program leaves it.
 

@@ -102,6 +102,10 @@ script -q -f out.raw -c claude
 cargo run --release -p tersh-adapters --example replay -- out.raw 120 40 --screen
 ```
 
+It feeds the recording in 4 KiB reads with 10,000 lines of scrollback, as the
+app does, so the time it prints includes scroll tracking once the scrollback
+is full.
+
 `cargo test -p tersh-adapters --test memory` checks for leaks: the heap stays
 flat while scrollback churns, and returns to its baseline after many sessions
 are opened and closed, even when the program ignores the hang-up and keeps

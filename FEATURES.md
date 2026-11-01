@@ -91,6 +91,7 @@ three OSes; `ci desktop` = the Tauri build and clippy on Linux.
 | PERF-03 | Frames that change nothing are not sent to the page                                                            | Profiler: "unchanged" counts up while a program redraws the same screen    |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes)      |
 | PERF-04 | No leaks: heap is flat with full scrollback; closed sessions free everything, even if the shell ignores SIGHUP | `cargo test -p tersh-adapters --test memory`                               |  ✅   |  🧪   |   🧪    | cargo (memory), vitest (memory) |
 | PERF-05 | Replay a recording through the emulator to time parsing and frame building                                     | `cargo run --release -p tersh-adapters --example replay -- out.raw 120 40` |  ✅   |  🧪   |   🧪    |                                 |
+| PERF-06 | Output parses near the emulator's own speed even with full scrollback                                          | Fill the scrollback, then `cat` a 50 MB log; or run the `replay` example   |  ✅   |  🧪   |   🧪    | cargo (tersh-adapters scroll)   |
 
 ## Configuration and themes (CONF)
 
