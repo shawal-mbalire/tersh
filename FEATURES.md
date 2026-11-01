@@ -84,13 +84,13 @@ three OSes; `ci desktop` = the Tauri build and clippy on Linux.
 
 ## Performance and memory (PERF)
 
-| ID      | Feature                                                                                               | How to check                                                               | Linux | macOS | Windows | Automated by                    |
-| ------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | :---: | :---: | :-----: | ------------------------------- |
-| PERF-01 | Profiler overlay (`toggle_profiler`, Ctrl+Shift+P): paint time, key-to-screen latency, frames, memory | Press it, type, run `seq 100000`                                           |  ✅   |  🧪   |   🧪    | vitest (profile)                |
-| PERF-02 | Session counters over the socket: `{"op":"stats"}`; `tersh.profile()` for plugins                     | `printf '{"op":"stats"}\n' \| socat - UNIX:$TERSH_SOCKET`                  |  ✅   |  🧪   |    —    | cargo (session_with_fakes)      |
-| PERF-03 | Frames that change nothing are not sent to the page                                                   | Profiler: "unchanged" counts up while a program redraws the same screen    |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes)      |
+| ID      | Feature                                                                                                        | How to check                                                               | Linux | macOS | Windows | Automated by                    |
+| ------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | :---: | :---: | :-----: | ------------------------------- |
+| PERF-01 | Profiler overlay (`toggle_profiler`, Ctrl+Shift+P): paint time, key-to-screen latency, frames, memory          | Press it, type, run `seq 100000`                                           |  ✅   |  🧪   |   🧪    | vitest (profile)                |
+| PERF-02 | Session counters over the socket: `{"op":"stats"}`; `tersh.profile()` for plugins                              | `printf '{"op":"stats"}\n' \| socat - UNIX:$TERSH_SOCKET`                  |  ✅   |  🧪   |    —    | cargo (session_with_fakes)      |
+| PERF-03 | Frames that change nothing are not sent to the page                                                            | Profiler: "unchanged" counts up while a program redraws the same screen    |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes)      |
 | PERF-04 | No leaks: heap is flat with full scrollback; closed sessions free everything, even if the shell ignores SIGHUP | `cargo test -p tersh-adapters --test memory`                               |  ✅   |  🧪   |   🧪    | cargo (memory), vitest (memory) |
-| PERF-05 | Replay a recording through the emulator to time parsing and frame building                            | `cargo run --release -p tersh-adapters --example replay -- out.raw 120 40` |  ✅   |  🧪   |   🧪    |                                 |
+| PERF-05 | Replay a recording through the emulator to time parsing and frame building                                     | `cargo run --release -p tersh-adapters --example replay -- out.raw 120 40` |  ✅   |  🧪   |   🧪    |                                 |
 
 ## Configuration and themes (CONF)
 
