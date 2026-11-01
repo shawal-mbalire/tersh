@@ -4,6 +4,7 @@
 //! implemented in `tersh-adapters`.
 
 pub mod config;
+pub mod env;
 pub mod event;
 pub mod frame;
 pub mod palette;

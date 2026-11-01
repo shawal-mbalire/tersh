@@ -42,6 +42,9 @@ pub struct SessionOptions {
     /// `None` starts in the home directory.
     pub cwd: Option<PathBuf>,
     pub env: Vec<(String, String)>,
+    /// The environment the shell would inherit. Paths into tersh's own
+    /// bundle (the AppImage) are removed from it before the shell starts.
+    pub inherited_env: Vec<(String, String)>,
     pub cols: u16,
     pub rows: u16,
     pub cell_width: u16,
@@ -62,6 +65,7 @@ impl SessionOptions {
             args: config.args.clone(),
             cwd: None,
             env: config.env.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+            inherited_env: std::env::vars().collect(),
             cols,
             rows,
             cell_width: 0,
@@ -158,12 +162,17 @@ impl RichInbox {
 
 impl Session {
     pub fn spawn(options: SessionOptions, ports: Ports<'_>, sink: Arc<dyn Sink>) -> Result<Self> {
-        let mut env: Vec<(String, String)> = vec![
+        // Undo the AppImage launcher's paths first, so `[env]` in the config still wins.
+        let cleanup = tersh_domain::env::without_bundle(&options.inherited_env);
+        let mut env_remove: Vec<String> = NOT_INHERITED.map(String::from).to_vec();
+        env_remove.extend(cleanup.remove);
+        let mut env = cleanup.set;
+        env.extend([
             ("TERM".into(), "xterm-256color".into()),
             ("COLORTERM".into(), "truecolor".into()),
             ("TERM_PROGRAM".into(), "tersh".into()),
             ("TERM_PROGRAM_VERSION".into(), env!("CARGO_PKG_VERSION").into()),
-        ];
+        ]);
         if let Some(path) = &options.rich_socket {
             env.push(("TERSH_SOCKET".into(), path.display().to_string()));
         }
@@ -172,7 +181,7 @@ impl Session {
             shell: options.shell.clone(),
             args: options.args.clone(),
             cwd: options.cwd.clone(),
-            env_remove: NOT_INHERITED.map(String::from).to_vec(),
+            env_remove,
             env,
             cols: options.cols,
             rows: options.rows,

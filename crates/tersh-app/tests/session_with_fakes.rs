@@ -224,6 +224,37 @@ fn spawn_request_sets_up_the_environment() {
 }
 
 #[test]
+fn shells_do_not_inherit_the_appimage_bundle() {
+    let (tx, rx) = mpsc::channel::<Vec<u8>>();
+    let pty = FakePty { output: Mutex::new(Some(rx)), ..Default::default() };
+    let emulators = FakeEmulators::default();
+    let mut options = SessionOptions::from_config(&Config::default(), 80, 24);
+    let mut config = Config::default();
+    config.env.insert("LD_LIBRARY_PATH".into(), "/opt/mine".into());
+    options.env = config.env.into_iter().collect();
+    options.inherited_env = [
+        ("HOME", "/home/u"),
+        ("APPDIR", "/home/u/.local/share/tersh/app"),
+        ("PATH", "/home/u/.local/share/tersh/app/usr/bin:/usr/bin"),
+        ("LD_LIBRARY_PATH", "/home/u/.local/share/tersh/app/usr/lib"),
+        ("PYTHONHOME", "/home/u/.local/share/tersh/app/usr/"),
+    ]
+    .map(|(k, v)| (k.to_string(), v.to_string()))
+    .to_vec();
+    let _session = Session::spawn(options, Ports { pty: &pty, emulator: &emulators }, Arc::new(Recorder::default())).unwrap();
+    drop(tx);
+
+    let request = pty.requests.lock().unwrap()[0].clone();
+    for key in ["APPDIR", "PYTHONHOME", "TMUX"] {
+        assert!(request.env_remove.contains(&key.to_string()), "{key} not removed");
+    }
+    // Later entries win when the PTY applies them: the user's `[env]` beats the cleanup.
+    let env: std::collections::HashMap<_, _> = request.env.into_iter().collect();
+    assert_eq!(env["PATH"], "/usr/bin");
+    assert_eq!(env["LD_LIBRARY_PATH"], "/opt/mine");
+}
+
+#[test]
 fn inbox_answers_info_and_rejects_bad_messages() {
     let (session, _output, _pty, _emulators, recorder) = start();
     session.resize(100, 30, 9, 18).unwrap();
