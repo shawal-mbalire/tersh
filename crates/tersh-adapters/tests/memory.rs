@@ -166,7 +166,10 @@ fn programs_that_ignore_hangup_do_not_keep_sessions_alive() {
     session.write(format!("trap '' HUP; echo $$ > {}\n", pid_file.display()).as_bytes()).unwrap();
     wait_for("shell ignoring hangup", || std::fs::read_to_string(&pid_file).is_ok_and(|s| s.ends_with('\n')));
     let pid = std::fs::read_to_string(&pid_file).unwrap().trim().to_string();
-    let alive = || std::process::Command::new("kill").args(["-0", &pid]).status().is_ok_and(|s| s.success());
+    let kill = |signal: &str| {
+        std::process::Command::new("kill").args([signal, &pid]).stderr(std::process::Stdio::null()).status()
+    };
+    let alive = || kill("-0").is_ok_and(|s| s.success());
 
     let inbox = session.rich_inbox();
     drop(session);
@@ -175,7 +178,7 @@ fn programs_that_ignore_hangup_do_not_keep_sessions_alive() {
         std::thread::sleep(Duration::from_millis(10));
     }
     let (released, exited) = (inbox.is_released(), !alive());
-    let _ = std::process::Command::new("kill").args(["-9", &pid]).status();
+    let _ = kill("-9");
     let _ = std::fs::remove_dir_all(&dir);
     assert!(released, "the session was not released while its program ignored the hangup");
     assert!(exited, "the program was still running after its terminal closed");

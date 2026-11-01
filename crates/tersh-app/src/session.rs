@@ -14,14 +14,14 @@ use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result};
 use serde_json::Value;
 use tersh_domain::config::Cursor;
 use tersh_domain::rich::{self, AnchorContext, Chunk, OscScanner};
+use tersh_domain::error::{AppError, Code, Result};
 use tersh_domain::update::Foreground;
 use tersh_domain::{Config, Frame, Info, Palette, Rgb, Stats, TermEvent, WindowSize};
 
-use crate::ports::{
+use crate::ports::{Measurement, TimePort, 
     Emulator, EmulatorFactory, EmulatorOptions, ProcessInspector, ProcessKiller, PtyControl, PtySystem, Scroll, Sink,
     SpawnRequest, TermHost,
 };
@@ -93,6 +93,7 @@ impl SessionOptions {
 pub struct Ports<'a> {
     pub pty: &'a dyn PtySystem,
     pub emulator: &'a dyn EmulatorFactory,
+    pub clock: Arc<dyn TimePort>,
 }
 
 /// Profiling counters (see [`Stats`]); plain atomic adds on the hot paths.
@@ -177,6 +178,18 @@ impl TermHost for Host {
     fn window_size(&self) -> WindowSize {
         *lock(&self.size)
     }
+
+    fn measured(&self, measurement: Measurement) {
+        let counters = &self.counters;
+        match measurement {
+            Measurement::Advance(took) => add(&counters.parse_us, micros(took)),
+            Measurement::Frame(took) => {
+                let took = micros(took);
+                add(&counters.build_us, took);
+                counters.build_max_us.fetch_max(took, Ordering::Relaxed);
+            },
+        }
+    }
 }
 
 struct State {
@@ -194,6 +207,7 @@ struct Shared {
     wake: mpsc::Sender<()>,
     closed: AtomicBool,
     options: SessionOptions,
+    clock: Arc<dyn TimePort>,
     started: Instant,
 }
 
@@ -257,7 +271,7 @@ impl Session {
             cell_width: options.cell_width,
             cell_height: options.cell_height,
         };
-        let process = ports.pty.spawn(&request).context("starting the shell")?;
+        let process = ports.pty.spawn(&request)?;
         log::debug!("started {}", process.program);
         let mut output = process.output;
         let mut child = process.child;
@@ -265,7 +279,7 @@ impl Session {
         let (input, input_rx) = mpsc::channel();
         let writer = process.input;
         let c = counters.clone();
-        thread::Builder::new().name("tersh-pty-write".into()).spawn(move || write_loop(writer, input_rx, c))?;
+        start_thread("tersh-pty-write", move || write_loop(writer, input_rx, c))?;
         let killer = child.killer();
         let shell_pid = child.pid();
 
@@ -293,14 +307,15 @@ impl Session {
             wake,
             closed: AtomicBool::new(false),
             options,
-            started: Instant::now(),
+            started: ports.clock.now(),
+            clock: ports.clock,
         });
 
         // The reader and the wait thread hold the session weakly: either can
         // block for as long as something keeps the terminal or the program
         // alive, and must not keep a dropped session's memory with it.
         let weak = Arc::downgrade(&shared);
-        thread::Builder::new().name("tersh-pty-read".into()).spawn(move || {
+        start_thread("tersh-pty-read", move || {
             let mut buf = vec![0u8; READ_BUFFER];
             loop {
                 let n = match output.read(&mut buf) {
@@ -314,10 +329,10 @@ impl Session {
         })?;
 
         let s = shared.clone();
-        thread::Builder::new().name("tersh-render".into()).spawn(move || s.render_loop(wake_rx))?;
+        start_thread("tersh-render", move || s.render_loop(wake_rx))?;
 
         let weak = Arc::downgrade(&shared);
-        thread::Builder::new().name("tersh-wait".into()).spawn(move || {
+        start_thread("tersh-wait", move || {
             let code = child.wait();
             let Some(s) = weak.upgrade() else { return };
             s.closed.store(true, Ordering::SeqCst);
@@ -351,7 +366,9 @@ impl Session {
                 let _ = self.shared.wake.send(());
             }
         }
-        anyhow::ensure!(self.shared.host.send(bytes), "the program's input is closed");
+        if !self.shared.host.send(bytes) {
+            return Err(AppError::new(Code::InputClosed, "the program's input is closed"));
+        }
         Ok(())
     }
 
@@ -439,7 +456,6 @@ impl Drop for Session {
 
 impl Shared {
     fn process(&self, bytes: &[u8]) {
-        let started = Instant::now();
         let mut messages = Vec::new();
         {
             let mut state = lock(&self.state);
@@ -460,7 +476,6 @@ impl Shared {
             });
         }
         let counters = &self.host.counters;
-        add(&counters.parse_us, micros(started.elapsed()));
         add(&counters.output_bytes, bytes.len() as u64);
         add(&counters.output_reads, 1);
         for (payload, ctx) in messages {
@@ -485,11 +500,11 @@ impl Shared {
         let ctx = lock(&self.state).emulator.anchor_context();
         match self.dispatch(message, ctx) {
             Ok(()) => serde_json::json!({ "ok": true }),
-            Err(error) => serde_json::json!({ "ok": false, "error": error }),
+            Err(error) => serde_json::json!({ "ok": false, "error": error, "code": error.code.as_str() }),
         }
     }
 
-    fn dispatch(&self, message: Result<Value, String>, ctx: AnchorContext) -> Result<(), String> {
+    fn dispatch(&self, message: Result<Value>, ctx: AnchorContext) -> Result<()> {
         match message {
             Ok(mut msg) => {
                 rich::resolve_anchor(&mut msg, &ctx);
@@ -497,7 +512,7 @@ impl Shared {
                 Ok(())
             },
             Err(error) => {
-                self.host.sink.event(TermEvent::RichError { error: error.clone() });
+                self.host.sink.event(TermEvent::RichError { error: error.to_string() });
                 Err(error)
             },
         }
@@ -523,7 +538,7 @@ impl Shared {
         let c = &self.host.counters;
         let get = |counter: &AtomicU64| counter.load(Ordering::Relaxed);
         Stats {
-            uptime_ms: self.started.elapsed().as_millis().try_into().unwrap_or(u64::MAX),
+            uptime_ms: (self.clock.now() - self.started).as_millis().try_into().unwrap_or(u64::MAX),
             output_bytes: get(&c.output_bytes),
             output_reads: get(&c.output_reads),
             parse_us: get(&c.parse_us),
@@ -542,19 +557,19 @@ impl Shared {
     }
 
     fn render_loop(&self, wake: mpsc::Receiver<()>) {
-        let mut last_frame = Instant::now() - FRAME_INTERVAL;
+        let mut last_frame = self.clock.now() - FRAME_INTERVAL;
         let mut last_sent: Option<Frame> = None;
         loop {
             // Wake for new output, or when a synchronized update times out.
             let deadline = lock(&self.state).emulator.sync_deadline();
-            let wait = deadline.map_or(IDLE_WAIT, |d| d.saturating_duration_since(Instant::now()));
+            let wait = deadline.map_or(IDLE_WAIT, |d| d.saturating_duration_since(self.clock.now()));
             match wake.recv_timeout(wait) {
                 Ok(()) | Err(RecvTimeoutError::Timeout) => {},
                 Err(RecvTimeoutError::Disconnected) => return,
             }
-            let since = last_frame.elapsed();
+            let since = self.clock.now() - last_frame;
             if since < FRAME_INTERVAL {
-                thread::sleep(FRAME_INTERVAL - since);
+                self.clock.sleep(FRAME_INTERVAL - since);
             }
             while wake.try_recv().is_ok() {}
 
@@ -562,24 +577,20 @@ impl Shared {
                 let mut state = lock(&self.state);
                 let State { emulator, force_full, .. } = &mut *state;
                 if let Some(deadline) = emulator.sync_deadline() {
-                    if Instant::now() < deadline {
+                    if self.clock.now() < deadline {
                         // Mid synchronized update: wait for it to finish.
                         continue;
                     }
                     emulator.flush_sync();
                 }
-                let started = Instant::now();
                 let frame = emulator.frame(*force_full);
                 *force_full = false;
-                let took = micros(started.elapsed());
                 let counters = &self.host.counters;
                 add(&counters.frames_built, 1);
-                add(&counters.build_us, took);
-                counters.build_max_us.fetch_max(took, Ordering::Relaxed);
                 counters.history.store(frame.history as u64, Ordering::Relaxed);
                 frame
             };
-            last_frame = Instant::now();
+            last_frame = self.clock.now();
             // Output that changed nothing visible (e.g. a redraw of identical
             // text) needs no trip to the UI.
             if last_sent.as_ref().is_none_or(|last| !unchanged(last, &frame)) {
@@ -611,6 +622,15 @@ fn unchanged(last: &Frame, next: &Frame) -> bool {
 }
 
 /// Lock, recovering from poisoning: a panic elsewhere shouldn't freeze the terminal.
+/// Start a named thread for the session.
+fn start_thread(name: &str, body: impl FnOnce() + Send + 'static) -> Result<()> {
+    thread::Builder::new()
+        .name(name.into())
+        .spawn(body)
+        .map(drop)
+        .map_err(|e| AppError::new(Code::SessionStart, format!("could not start the {name} thread")).because(e))
+}
+
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|e| e.into_inner())
 }

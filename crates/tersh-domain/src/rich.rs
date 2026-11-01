@@ -14,6 +14,7 @@
 //! The scanner strips these sequences out of the PTY byte stream before it
 //! reaches the VT parser, so the core never has to fork the emulator.
 
+use crate::error::{AppError, Code, Result};
 use base64::Engine;
 use serde_json::Value;
 
@@ -178,19 +179,20 @@ impl OscScanner {
 }
 
 /// Decode a payload (raw JSON or base64 JSON) into a message object.
-pub fn decode_payload(payload: &[u8]) -> Result<Value, String> {
+pub fn decode_payload(payload: &[u8]) -> Result<Value> {
     let trimmed = payload.trim_ascii();
     let json = if trimmed.first() == Some(&b'{') {
         std::borrow::Cow::Borrowed(trimmed)
     } else {
         let decoded = base64::engine::general_purpose::STANDARD
             .decode(trimmed)
-            .map_err(|e| format!("payload is neither JSON nor base64: {e}"))?;
+            .map_err(|e| AppError::new(Code::RichPayload, "payload is neither JSON nor base64").because(e))?;
         std::borrow::Cow::Owned(decoded)
     };
-    let value: Value = serde_json::from_slice(&json).map_err(|e| format!("invalid JSON: {e}"))?;
+    let value: Value =
+        serde_json::from_slice(&json).map_err(|e| AppError::new(Code::RichPayload, "invalid JSON").because(e))?;
     if !value.is_object() {
-        return Err("message must be a JSON object".into());
+        return Err(AppError::new(Code::RichPayload, "message must be a JSON object"));
     }
     Ok(value)
 }

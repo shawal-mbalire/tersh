@@ -13,6 +13,7 @@
 //! keeps the AppImage's environment out of the programs tersh starts.
 
 pub mod binary;
+pub mod clock;
 pub mod config_fs;
 pub mod emulator;
 pub mod fonts;
@@ -20,24 +21,31 @@ pub mod processes;
 pub mod pty;
 #[cfg(unix)]
 pub mod socket;
+pub mod toml_format;
 pub mod update;
 
 use std::process::Command;
 use std::sync::Arc;
 
-use anyhow::Result;
+use tersh_domain::error::{AppError, Code, Result};
+use tersh_app::instrumented::Instrumented;
+use tersh_app::ports::TimePort;
 use tersh_app::{Ports, Session, SessionOptions, Sink};
 
+/// The process environment, as read once by the entry point.
+pub type EnvVars = Vec<(String, String)>;
+
 /// Give `command` the user's environment rather than the AppImage launcher's
-/// (see [`tersh_domain::env::without_bundle`]).
-pub fn unbundled(command: &mut Command) -> &mut Command {
-    let cleanup = tersh_domain::env::without_bundle(&std::env::vars().collect::<Vec<_>>());
+/// (see [`tersh_domain::env::without_bundle`]). `env` is this process's environment.
+pub fn unbundled<'a>(command: &'a mut Command, env: &[(String, String)]) -> &'a mut Command {
+    let cleanup = tersh_domain::env::without_bundle(env);
     for key in &cleanup.remove {
         command.env_remove(key);
     }
     command.envs(cleanup.set)
 }
 
+pub use clock::SystemClock;
 pub use config_fs::FsConfigStore;
 pub use emulator::AlacrittyEmulators;
 pub use fonts::SystemFontDirs;
@@ -61,11 +69,15 @@ pub fn spawn_local(mut options: SessionOptions, socket: bool, sink: Arc<dyn Sink
     #[cfg(not(unix))]
     let _ = (socket, &mut options);
 
-    let mut session = Session::spawn(options, Ports { pty: &NativePty, emulator: &AlacrittyEmulators }, sink)?;
+    let clock: Arc<dyn TimePort> = Arc::new(SystemClock);
+    let emulator = Instrumented::new(AlacrittyEmulators, clock.clone());
+    let mut session = Session::spawn(options, Ports { pty: &NativePty, emulator: &emulator, clock }, sink)?;
 
     #[cfg(unix)]
     if let Some(bound) = bound {
-        let server = bound.serve(session.rich_inbox())?;
+        let server = bound
+            .serve(session.rich_inbox())
+            .map_err(|e| AppError::new(Code::SocketServe, "could not serve the rich socket").because(e))?;
         session.keep_alive(Box::new(server));
     }
     Ok(session)

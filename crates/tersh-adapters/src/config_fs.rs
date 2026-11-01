@@ -12,7 +12,11 @@ use std::path::{Path, PathBuf};
 
 use tersh_app::ports::{ConfigStore, Fingerprint, Plugin};
 use tersh_domain::config::TEMPLATE;
+use tersh_domain::error::{AppError, Code, Result};
+use tersh_domain::theme::ThemeSpec;
 use tersh_domain::{theme, Config, ThemeSource};
+
+use crate::toml_format;
 
 #[derive(Debug, Clone)]
 pub struct FsConfigStore {
@@ -50,12 +54,12 @@ impl FsConfigStore {
 struct ThemeFiles<'a>(&'a Path);
 
 impl ThemeSource for ThemeFiles<'_> {
-    fn read(&self, name: &str) -> Option<Result<String, String>> {
+    fn read(&self, name: &str) -> Option<Result<ThemeSpec>> {
         let path = self.0.join(format!("{name}.toml"));
         match fs::read_to_string(&path) {
-            Ok(text) => Some(Ok(text)),
+            Ok(text) => Some(toml_format::theme(&text).map_err(|e| e.with("path", path.display()))),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
-            Err(e) => Some(Err(format!("{}: {e}", path.display()))),
+            Err(e) => Some(Err(AppError::new(Code::ThemeRead, format!("could not read {}", path.display())).because(e))),
         }
     }
 
@@ -75,7 +79,7 @@ impl ConfigStore for FsConfigStore {
         let path = self.config_path();
         let themes = ThemeFiles(&self.themes_dir());
         match fs::read_to_string(&path) {
-            Ok(text) => Config::parse(&text, &themes).unwrap_or_else(|e| {
+            Ok(text) => toml_format::config(&text, &themes).unwrap_or_else(|e| {
                 let mut config = Config::defaults(&themes);
                 config.warnings.push(format!("{}: {e}; using defaults", path.display()));
                 config
@@ -83,20 +87,22 @@ impl ConfigStore for FsConfigStore {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Config::defaults(&themes),
             Err(e) => {
                 let mut config = Config::defaults(&themes);
-                config.warnings.push(format!("{}: {e}", path.display()));
+                let error = AppError::new(Code::ConfigRead, format!("could not read {}", path.display())).because(e);
+                config.warnings.push(error.to_string());
                 config
             },
         }
     }
 
-    fn ensure(&self) -> std::io::Result<()> {
+    fn ensure(&self) -> Result<()> {
         let path = self.config_path();
         if path.exists() {
             return Ok(());
         }
-        fs::create_dir_all(self.themes_dir())?;
-        fs::create_dir_all(self.plugin_dir())?;
-        fs::write(path, TEMPLATE)
+        let created = fs::create_dir_all(self.themes_dir())
+            .and_then(|()| fs::create_dir_all(self.plugin_dir()))
+            .and_then(|()| fs::write(&path, TEMPLATE));
+        created.map_err(|e| AppError::new(Code::ConfigWrite, format!("could not create {}", path.display())).because(e))
     }
 
     fn style(&self) -> Option<String> {

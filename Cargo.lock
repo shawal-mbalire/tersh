@@ -3823,21 +3823,21 @@ name = "tersh-adapters"
 version = "0.3.0"
 dependencies = [
  "alacritty_terminal",
- "anyhow",
  "dirs",
  "libc",
  "log",
  "portable-pty",
+ "serde_ignored",
  "serde_json",
  "tersh-app",
  "tersh-domain",
+ "toml 1.1.8+spec-1.1.0",
 ]
 
 [[package]]
 name = "tersh-app"
 version = "0.3.0"
 dependencies = [
- "anyhow",
  "log",
  "serde",
  "serde_json",
@@ -3850,7 +3850,6 @@ version = "0.3.0"
 dependencies = [
  "base64 0.23.1",
  "serde",
- "serde_ignored",
  "serde_json",
  "toml 1.1.8+spec-1.1.0",
 ]

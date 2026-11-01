@@ -5,22 +5,23 @@ use std::io::{Read, Write};
 #[cfg(unix)]
 use std::sync::Arc;
 
-use anyhow::{Context, Result};
 use portable_pty::{Child, ChildKiller, CommandBuilder, MasterPty, PtySize};
 use tersh_app::ports::{ChildProcess, ProcessKiller, PtyControl, PtyProcess, PtySystem, SpawnRequest};
+use tersh_domain::error::{AppError, Code, Result};
 use tersh_domain::WindowSize;
 
 /// The platform's native pseudo-terminals.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct NativePty;
 
-/// The shell to run when the config doesn't name one.
-pub fn default_shell() -> String {
-    if cfg!(windows) {
-        std::env::var("COMSPEC").unwrap_or_else(|_| "powershell.exe".into())
-    } else {
-        std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into())
-    }
+/// The shell to run when neither the config nor the environment names one
+/// (the entry point reads `$SHELL` / `%COMSPEC%` into `SpawnRequest::shell`).
+pub const FALLBACK_SHELL: &str = if cfg!(windows) { "powershell.exe" } else { "/bin/sh" };
+
+/// The user's shell named by an environment (`$SHELL`, or `%COMSPEC%` on Windows).
+pub fn shell_from(env: &[(String, String)]) -> Option<String> {
+    let key = if cfg!(windows) { "COMSPEC" } else { "SHELL" };
+    env.iter().find(|(k, v)| k == key && !v.is_empty()).map(|(_, v)| v.clone())
 }
 
 impl PtySystem for NativePty {
@@ -32,9 +33,9 @@ impl PtySystem for NativePty {
                 pixel_width: request.cols * request.cell_width,
                 pixel_height: request.rows * request.cell_height,
             })
-            .context("opening pty")?;
+            .map_err(|e| AppError::new(Code::PtyOpen, "could not open a pseudo-terminal").because(e))?;
 
-        let program = request.shell.clone().unwrap_or_else(default_shell);
+        let program = request.shell.clone().unwrap_or_else(|| FALLBACK_SHELL.into());
         let mut cmd = CommandBuilder::new(&program);
         cmd.args(&request.args);
         if let Some(cwd) = request.cwd.clone().or_else(dirs::home_dir) {
@@ -47,18 +48,25 @@ impl PtySystem for NativePty {
             cmd.env(key, value);
         }
 
-        let child = pty.slave.spawn_command(cmd).with_context(|| format!("starting {program}"))?;
+        let child = pty
+            .slave
+            .spawn_command(cmd)
+            .map_err(|e| AppError::new(Code::ShellStart, format!("could not start {program}")).because(e))?;
         drop(pty.slave);
         #[cfg(unix)]
         let (output, input, hangup): (Box<dyn Read + Send>, Box<dyn Write + Send>, _) = {
-            let fd = pty.master.as_raw_fd().context("the pty has no descriptor")?;
-            let terminal = Arc::new(unix::Terminal::new(fd).context("opening the pty")?);
+            let open = |e: std::io::Error| AppError::new(Code::PtyOpen, "could not open the pseudo-terminal").because(e);
+            let fd = pty.master.as_raw_fd().ok_or_else(|| open(std::io::Error::other("the pty has no descriptor")))?;
+            let terminal = Arc::new(unix::Terminal::new(fd).map_err(open)?);
             (Box::new(unix::Output(terminal.clone())), Box::new(unix::Input(terminal.clone())), terminal)
         };
         // On Windows the output ends when the pseudo console closes, which
         // happens when `Control` is dropped with the session.
         #[cfg(not(unix))]
-        let (output, input, hangup) = (pty.master.try_clone_reader()?, pty.master.take_writer()?, ());
+        let (output, input, hangup) = {
+            let open = |e| AppError::new(Code::PtyOpen, "could not open the pseudo-terminal").because(e);
+            (pty.master.try_clone_reader().map_err(open)?, pty.master.take_writer().map_err(open)?, ())
+        };
         Ok(PtyProcess {
             output,
             input,
@@ -84,7 +92,8 @@ impl PtyControl for Control {
             cols: size.cols,
             pixel_width: size.cols * size.cell_width,
             pixel_height: size.rows * size.cell_height,
-        })
+            })
+            .map_err(|e| AppError::new(Code::PtyResize, "could not resize the terminal").because(e))
     }
 
     #[cfg(unix)]

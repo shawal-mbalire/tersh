@@ -7,9 +7,10 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 use tersh_app::ports::{
-    ChildProcess, Emulator, EmulatorFactory, EmulatorOptions, ProcessKiller, PtyControl, PtyProcess, PtySystem, Scroll,
+    ChildProcess, Emulator, EmulatorFactory, TimePort, EmulatorOptions, ProcessKiller, PtyControl, PtyProcess, PtySystem, Scroll,
     SpawnRequest, TermHost,
 };
+use tersh_app::instrumented::Instrumented;
 use tersh_app::{Ports, Session, SessionOptions, Sink};
 use tersh_domain::frame::{Cursor, Shape};
 use tersh_domain::rich::{AnchorContext, Screen};
@@ -52,7 +53,7 @@ impl Write for Shared {
 /// Hangs up by ending the fake program's output (an empty chunk reads as end-of-file).
 struct NoControl(Option<Sender<Vec<u8>>>);
 impl PtyControl for NoControl {
-    fn resize(&self, _: WindowSize) -> anyhow::Result<()> {
+    fn resize(&self, _: WindowSize) -> tersh_domain::error::Result<()> {
         Ok(())
     }
     fn foreground_pid(&self) -> Option<u32> {
@@ -105,7 +106,7 @@ struct FakePty {
 }
 
 impl PtySystem for FakePty {
-    fn spawn(&self, request: &SpawnRequest) -> anyhow::Result<PtyProcess> {
+    fn spawn(&self, request: &SpawnRequest) -> tersh_domain::error::Result<PtyProcess> {
         self.requests.lock().unwrap().push(request.clone());
         let (exit_tx, exit_rx) = mpsc::channel();
         Ok(PtyProcess {
@@ -200,7 +201,49 @@ fn eventually(what: &str, check: impl Fn() -> bool) {
 /// A session plus the handles a test drives it through.
 type Rig = (Session, Sender<Vec<u8>>, Arc<FakePty>, Arc<FakeEmulators>, Arc<Recorder>);
 
+/// A clock that only moves when told to, or by `step` on every reading.
+struct FakeClock {
+    base: Instant,
+    offset: Mutex<Duration>,
+    step: Duration,
+}
+
+impl FakeClock {
+    fn new(step: Duration) -> Arc<Self> {
+        Arc::new(Self { base: Instant::now(), offset: Mutex::new(Duration::ZERO), step })
+    }
+    fn advance(&self, by: Duration) {
+        *self.offset.lock().unwrap() += by;
+    }
+}
+
+impl TimePort for FakeClock {
+    fn now(&self) -> Instant {
+        let mut offset = self.offset.lock().unwrap();
+        *offset += self.step;
+        self.base + *offset
+    }
+    fn sleep(&self, duration: Duration) {
+        self.advance(duration);
+    }
+}
+
 fn start() -> Rig {
+    start_with(Arc::new(SystemClock), None)
+}
+
+struct SystemClock;
+impl TimePort for SystemClock {
+    fn now(&self) -> Instant {
+        Instant::now()
+    }
+    fn sleep(&self, duration: Duration) {
+        std::thread::sleep(duration);
+    }
+}
+
+/// A session on `clock`, its emulators measured on `instrument` when given.
+fn start_with(clock: Arc<dyn TimePort>, instrument: Option<Arc<dyn TimePort>>) -> Rig {
     let (tx, rx) = mpsc::channel();
     let pty = Arc::new(FakePty {
         output: Mutex::new(Some(rx)),
@@ -211,7 +254,14 @@ fn start() -> Rig {
     let recorder = Arc::new(Recorder::default());
     let mut options = SessionOptions::from_config(&Config::default(), 80, 24);
     options.rich_socket = Some("/run/tersh.sock".into());
-    let session = Session::spawn(options, Ports { pty: &*pty, emulator: &*emulators }, recorder.clone()).unwrap();
+    let session = match instrument {
+        Some(measure) => {
+            let emulator = Instrumented::new(&*emulators, measure);
+            Session::spawn(options, Ports { pty: &*pty, emulator: &emulator, clock }, recorder.clone())
+        },
+        None => Session::spawn(options, Ports { pty: &*pty, emulator: &*emulators, clock }, recorder.clone()),
+    }
+    .unwrap();
     (session, tx, pty, emulators, recorder)
 }
 
@@ -273,7 +323,7 @@ fn shells_do_not_inherit_the_appimage_bundle() {
     ]
     .map(|(k, v)| (k.to_string(), v.to_string()))
     .to_vec();
-    let _session = Session::spawn(options, Ports { pty: &pty, emulator: &emulators }, Arc::new(Recorder::default())).unwrap();
+    let _session = Session::spawn(options, Ports { pty: &pty, emulator: &emulators, clock: Arc::new(SystemClock) }, Arc::new(Recorder::default())).unwrap();
     drop(tx);
 
     let request = pty.requests.lock().unwrap()[0].clone();
@@ -380,4 +430,26 @@ fn sessions_are_released_while_a_background_program_holds_the_terminal() {
     eventually("session released", || inbox.is_released());
     // The reader thread was woken and has finished (it dropped its end).
     eventually("reader stopped", || output.send(Vec::new()).is_err());
+}
+
+#[test]
+fn the_instrumented_emulator_times_parsing_and_frames() {
+    // Every reading of this clock is 1ms after the last, so each measured call takes 1ms.
+    let measure = FakeClock::new(Duration::from_millis(1));
+    let (session, output, _pty, _emulators, _recorder) = start_with(Arc::new(SystemClock), Some(measure));
+    output.send(b"hello".to_vec()).unwrap();
+    eventually("a frame", || session.stats().frames_sent >= 1);
+    let stats = session.stats();
+    assert_eq!(stats.parse_us, 1_000, "one advance call");
+    assert_eq!(stats.build_us, 1_000 * stats.frames_built);
+    assert_eq!(stats.build_max_us, 1_000);
+}
+
+#[test]
+fn uptime_comes_from_the_clock() {
+    let clock = FakeClock::new(Duration::ZERO);
+    let (session, _output, _pty, _emulators, _recorder) = start_with(clock.clone(), None);
+    let before = session.stats().uptime_ms;
+    clock.advance(Duration::from_secs(90));
+    assert!(session.stats().uptime_ms >= before + 90_000);
 }

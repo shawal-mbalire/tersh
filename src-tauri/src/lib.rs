@@ -5,6 +5,7 @@
 
 mod cards;
 mod cli;
+mod environment;
 mod settings;
 mod updates;
 
@@ -18,7 +19,7 @@ use tauri::{AppHandle, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilde
 use tersh_adapters::{FsConfigStore, SystemFontDirs, SystemProcesses};
 use tersh_app::ports::{ConfigStore, Plugin, ProcessInspector, Watchable};
 use tersh_app::{Session, SessionOptions, Sink};
-use tersh_domain::{Config, Frame, Info, Stats, TermEvent};
+use tersh_domain::{AppError, Code, Config, Frame, Info, Stats, TermEvent};
 
 /// How long the window may stay hidden waiting for the page's first paint
 /// before it is shown anyway (e.g. if the page failed to load).
@@ -76,12 +77,14 @@ struct AppState {
     session: Mutex<Option<Session>>,
     /// Where to start the shell and what to type into it (from the command line, e.g. after a restart).
     launch: Mutex<cli::Launch>,
+    env: environment::Environment,
     /// Whether the window has been shown (it starts hidden; see [`window_ready`]).
     shown: AtomicBool,
     started: std::time::Instant,
 }
 
-type CmdResult<T> = Result<T, String>;
+/// Commands fail with an [`AppError`], which reaches the page as its text.
+type CmdResult<T> = tersh_domain::error::Result<T>;
 
 /// Attach the page to the shell, starting it on first call.
 #[tauri::command]
@@ -107,12 +110,14 @@ fn session_start(
             let mut options = SessionOptions::from_config(&state.config.lock().unwrap(), cols, rows);
             options.cell_width = cell_width;
             options.cell_height = cell_height;
-            options.inherited_env = std::env::vars().collect();
+            if options.shell.is_none() {
+                options.shell = state.env.shell.clone();
+            }
+            options.inherited_env = state.env.vars.clone();
             let launch = std::mem::take(&mut *state.launch.lock().unwrap());
             options.cwd = launch.cwd;
             let rich_enabled = state.config.lock().unwrap().rich.enabled;
-            let spawned = tersh_adapters::spawn_local(options, rich_enabled, state.sink.clone());
-            let spawned = spawned.map_err(|e| format!("{e:#}"))?;
+            let spawned = tersh_adapters::spawn_local(options, rich_enabled, state.sink.clone())?;
             if let Some(input) = launch.input {
                 let _ = spawned.write(input.as_bytes());
             }
@@ -123,17 +128,20 @@ fn session_start(
 }
 
 fn with_session<T>(state: &State<'_, AppState>, f: impl FnOnce(&Session) -> T) -> CmdResult<T> {
-    state.session.lock().unwrap().as_ref().map(f).ok_or_else(|| "no session".to_string())
+    match state.session.lock().unwrap().as_ref() {
+        Some(session) => Ok(f(session)),
+        None => Err(AppError::new(Code::NoSession, "no session")),
+    }
 }
 
 #[tauri::command]
 fn session_write(state: State<'_, AppState>, data: String) -> CmdResult<()> {
-    with_session(&state, |s| s.write(data.as_bytes()))?.map_err(|e| e.to_string())
+    with_session(&state, |s| s.write(data.as_bytes()))?
 }
 
 #[tauri::command]
 fn session_resize(state: State<'_, AppState>, cols: u16, rows: u16, cell_width: u16, cell_height: u16) -> CmdResult<()> {
-    with_session(&state, |s| s.resize(cols, rows, cell_width, cell_height))?.map_err(|e| e.to_string())
+    with_session(&state, |s| s.resize(cols, rows, cell_width, cell_height))?
 }
 
 #[tauri::command]
@@ -183,10 +191,10 @@ fn session_scroll_to_bottom(state: State<'_, AppState>) -> CmdResult<()> {
 pub fn main() {
     let code = match cli::parse(std::env::args().skip(1)) {
         Ok(cli::Command::Run(launch)) => {
-            run(launch);
+            run(launch, environment::Environment::read());
             0
         },
-        Ok(cli::Command::Update { check }) => updates::cli(check),
+        Ok(cli::Command::Update { check }) => updates::cli(check, environment::Environment::read()),
         Ok(cli::Command::Version) => {
             println!("tersh {}", env!("CARGO_PKG_VERSION"));
             0
@@ -203,11 +211,11 @@ pub fn main() {
     std::process::exit(code);
 }
 
-pub fn run(launch: cli::Launch) {
+pub fn run(launch: cli::Launch, env: environment::Environment) {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
     let store: Arc<dyn ConfigStore> = Arc::new(FsConfigStore::user());
     if let Err(e) = store.ensure() {
-        log::warn!("could not create {}: {e}", store.config_path().display());
+        log::warn!("{e}");
     }
     let config = store.load();
     for warning in &config.warnings {
@@ -221,11 +229,12 @@ pub fn run(launch: cli::Launch) {
         .manage(cards::CardStore::new(config.rich.html_network))
         .manage(AppState {
             store,
-            fonts: Arc::new(SystemFontDirs::new()),
+            fonts: Arc::new(SystemFontDirs::new(env.windows_dir.clone())),
             config: Mutex::new(config.clone()),
             sink: sink.clone(),
             session: Mutex::new(None),
             launch: Mutex::new(launch.clone()),
+            env,
             shown: AtomicBool::new(false),
             started: std::time::Instant::now(),
         })

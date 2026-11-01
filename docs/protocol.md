@@ -9,7 +9,8 @@ send them:
   passthrough: `ESC P tmux; <sequence with every ESC doubled> ESC \`.
 - **Socket:** connect to the Unix socket in `$TERSH_SOCKET` and write one JSON
   object per line. Each line gets a one-line reply: `{"ok":true}` or
-  `{"ok":false,"error":"..."}`. Use the socket for large payloads, or when you
+  `{"ok":false,"error":"...","code":"RCH-001"}` (codes are listed in
+  [errors.md](errors.md)). Use the socket for large payloads, or when you
   must know a card is placed before you print more. The socket only
   accepts the user's own connections (mode `0600`).
 

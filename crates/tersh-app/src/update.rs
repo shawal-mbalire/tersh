@@ -1,6 +1,6 @@
 //! The update use case: find out whether a newer release exists and install it.
 
-use anyhow::Result;
+use tersh_domain::error::Result;
 use tersh_domain::update::is_newer;
 
 use crate::ports::{Installer, ReleaseSource};
