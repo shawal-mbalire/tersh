@@ -58,6 +58,11 @@ pub trait PtyControl: Send {
     fn resize(&self, size: WindowSize) -> Result<()>;
     /// Leader of the terminal's foreground process group (the shell when it is at its prompt).
     fn foreground_pid(&self) -> Option<u32>;
+    /// Stop using the terminal: a blocked or later read of the process's
+    /// `output` returns end-of-file, and writes to its `input` fail. Called
+    /// when the session ends, because a background program can keep the
+    /// terminal open after the shell has gone.
+    fn hangup(&self);
 }
 
 pub trait ChildProcess: Send {

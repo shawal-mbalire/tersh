@@ -290,14 +290,19 @@ impl Session {
             started: Instant::now(),
         });
 
-        let s = shared.clone();
+        // The reader and the wait thread hold the session weakly: either can
+        // block for as long as something keeps the terminal or the program
+        // alive, and must not keep a dropped session's memory with it.
+        let weak = Arc::downgrade(&shared);
         thread::Builder::new().name("tersh-pty-read".into()).spawn(move || {
             let mut buf = vec![0u8; 64 * 1024];
             loop {
-                match output.read(&mut buf) {
+                let n = match output.read(&mut buf) {
                     Ok(0) | Err(_) => break,
-                    Ok(n) => s.process(&buf[..n]),
-                }
+                    Ok(n) => n,
+                };
+                let Some(s) = weak.upgrade() else { break };
+                s.process(&buf[..n]);
                 let _ = s.wake.send(());
             }
         })?;
@@ -305,9 +310,10 @@ impl Session {
         let s = shared.clone();
         thread::Builder::new().name("tersh-render".into()).spawn(move || s.render_loop(wake_rx))?;
 
-        let s = shared.clone();
+        let weak = Arc::downgrade(&shared);
         thread::Builder::new().name("tersh-wait".into()).spawn(move || {
             let code = child.wait();
+            let Some(s) = weak.upgrade() else { return };
             s.closed.store(true, Ordering::SeqCst);
             let _ = s.wake.send(());
             s.host.sink.event(TermEvent::Exit { code });
@@ -418,6 +424,8 @@ impl Drop for Session {
     fn drop(&mut self) {
         self.shared.closed.store(true, Ordering::SeqCst);
         lock(&self.shared.killer).kill();
+        // A background program may still hold the terminal open; stop reading anyway.
+        lock(&self.shared.control).hangup();
         let _ = self.shared.wake.send(());
         // `guards` drop after this, once the program is gone.
     }

@@ -49,13 +49,19 @@ impl Write for Shared {
     }
 }
 
-struct NoControl;
+/// Hangs up by ending the fake program's output (an empty chunk reads as end-of-file).
+struct NoControl(Option<Sender<Vec<u8>>>);
 impl PtyControl for NoControl {
     fn resize(&self, _: WindowSize) -> anyhow::Result<()> {
         Ok(())
     }
     fn foreground_pid(&self) -> Option<u32> {
         Some(77)
+    }
+    fn hangup(&self) {
+        if let Some(output) = &self.0 {
+            let _ = output.send(Vec::new());
+        }
     }
 }
 
@@ -95,6 +101,7 @@ struct FakePty {
     output: Mutex<Option<Receiver<Vec<u8>>>>,
     input: Shared,
     requests: Mutex<Vec<SpawnRequest>>,
+    hangup: Mutex<Option<Sender<Vec<u8>>>>,
 }
 
 impl PtySystem for FakePty {
@@ -104,7 +111,7 @@ impl PtySystem for FakePty {
         Ok(PtyProcess {
             output: Box::new(ChannelReader { chunks: self.output.lock().unwrap().take().unwrap(), pending: Vec::new() }),
             input: Box::new(self.input.clone()),
-            control: Box::new(NoControl),
+            control: Box::new(NoControl(self.hangup.lock().unwrap().clone())),
             child: Box::new(FakeChild(Arc::new(Mutex::new(Some(exit_rx))), exit_tx)),
             program: "fake".into(),
         })
@@ -195,7 +202,11 @@ type Rig = (Session, Sender<Vec<u8>>, Arc<FakePty>, Arc<FakeEmulators>, Arc<Reco
 
 fn start() -> Rig {
     let (tx, rx) = mpsc::channel();
-    let pty = Arc::new(FakePty { output: Mutex::new(Some(rx)), ..Default::default() });
+    let pty = Arc::new(FakePty {
+        output: Mutex::new(Some(rx)),
+        hangup: Mutex::new(Some(tx.clone())),
+        ..Default::default()
+    });
     let emulators = Arc::new(FakeEmulators::default());
     let recorder = Arc::new(Recorder::default());
     let mut options = SessionOptions::from_config(&Config::default(), 80, 24);
@@ -357,4 +368,16 @@ fn dropped_sessions_are_released() {
         eventually("session released", || inbox.is_released());
         assert!(inbox.handle(br#"{"op":"info"}"#).is_none());
     }
+}
+
+#[test]
+fn sessions_are_released_while_a_background_program_holds_the_terminal() {
+    // `output` stays open, like a program started with `&` that outlives the shell.
+    let (session, output, _pty, _emulators, _recorder) = start();
+    output.send(b"some output".to_vec()).unwrap();
+    let inbox = session.rich_inbox();
+    drop(session);
+    eventually("session released", || inbox.is_released());
+    // The reader thread was woken and has finished (it dropped its end).
+    eventually("reader stopped", || output.send(Vec::new()).is_err());
 }

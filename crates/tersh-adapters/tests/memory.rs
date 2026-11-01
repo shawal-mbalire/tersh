@@ -90,6 +90,7 @@ impl Sink for NullSink {
 fn memory_stays_bounded() {
     emulator_is_flat_once_scrollback_is_full();
     closed_sessions_give_their_memory_back();
+    programs_that_ignore_hangup_do_not_keep_sessions_alive();
 }
 
 /// Scrollback is capped, so after it fills, more output (coloured lines,
@@ -148,4 +149,35 @@ fn closed_sessions_give_their_memory_back() {
     }
     let growth = live() - baseline;
     assert!(growth < 64 * KIB, "{} KiB still allocated after closing 15 sessions", growth / KIB);
+}
+
+/// The session hangs its program up when it closes (SIGHUP), but a shell can
+/// ignore that (`trap '' HUP`, `nohup`). Then the program never exits and
+/// its output never ends, so the threads waiting on them must not keep the
+/// session alive, and closing the terminal must still end the program.
+fn programs_that_ignore_hangup_do_not_keep_sessions_alive() {
+    let dir = std::env::temp_dir().join(format!("tersh-memory-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let pid_file = dir.join("pid");
+    let config = Config { shell: Some("/bin/sh".into()), ..Config::default() };
+    let options = SessionOptions::from_config(&config, 80, 24);
+    let session = spawn_local(options, true, Arc::new(NullSink)).expect("spawn shell");
+    let socket = session.socket_path().cloned().expect("socket");
+    session.write(format!("trap '' HUP; echo $$ > {}\n", pid_file.display()).as_bytes()).unwrap();
+    wait_for("shell ignoring hangup", || std::fs::read_to_string(&pid_file).is_ok_and(|s| s.ends_with('\n')));
+    let pid = std::fs::read_to_string(&pid_file).unwrap().trim().to_string();
+    let alive = || std::process::Command::new("kill").args(["-0", &pid]).status().is_ok_and(|s| s.success());
+
+    let inbox = session.rich_inbox();
+    drop(session);
+    let start = Instant::now();
+    while (!inbox.is_released() || alive()) && start.elapsed() < Duration::from_secs(5) {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let (released, exited) = (inbox.is_released(), !alive());
+    let _ = std::process::Command::new("kill").args(["-9", &pid]).status();
+    let _ = std::fs::remove_dir_all(&dir);
+    assert!(released, "the session was not released while its program ignored the hangup");
+    assert!(exited, "the program was still running after its terminal closed");
+    wait_for("socket removed", || !socket.exists());
 }

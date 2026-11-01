@@ -104,7 +104,8 @@ cargo run --release -p tersh-adapters --example replay -- out.raw 120 40 --scree
 
 `cargo test -p tersh-adapters --test memory` checks for leaks: the heap stays
 flat while scrollback churns, and returns to its baseline after many sessions
-are opened and closed. `src/__tests__/memory.test.ts` does the same for cards,
+are opened and closed, even when the program ignores the hang-up and keeps
+running. `src/__tests__/memory.test.ts` does the same for cards,
 listeners and the profiler in the page.
 
 ## Configuration
