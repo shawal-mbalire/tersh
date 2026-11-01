@@ -37,8 +37,9 @@ impl ReleaseSource for GithubReleases {
     }
 }
 
-/// Runs `install.sh` from the release being installed. Keeps the Neovim
-/// plugin up to date too if the installer put it there before.
+/// Runs the installer from the release being installed: `install.sh` on
+/// macOS and Linux, `install.ps1` on Windows. It updates every component the
+/// first install put in place (the installer remembers opt-outs).
 #[derive(Debug, Clone)]
 pub struct InstallScript {
     pub repo: String,
@@ -51,26 +52,30 @@ impl Default for InstallScript {
 }
 
 impl InstallScript {
-    fn nvim_plugin_installed() -> bool {
-        dirs::data_dir().is_some_and(|d| d.join("nvim/site/pack/tersh/start/tersh.nvim").is_dir())
+    /// The command that runs the installer for `tag` on this OS.
+    fn command(&self, tag: &str) -> Command {
+        let base = format!("https://raw.githubusercontent.com/{}/{tag}", self.repo);
+        if cfg!(windows) {
+            let mut command = Command::new("powershell");
+            command
+                .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command"])
+                .arg(format!("irm '{base}/install.ps1' | iex"))
+                .env("TERSH_VERSION", tag);
+            command
+        } else {
+            let mut command = Command::new("sh");
+            command.args(["-c", &format!("curl -fsSL '{base}/install.sh' | sh -s -- --version {tag}")]);
+            command
+        }
     }
 }
 
 impl Installer for InstallScript {
     fn install(&self, tag: &str) -> Result<()> {
-        if cfg!(windows) {
-            bail!("on Windows, install the new version from https://github.com/{}/releases/tag/{tag}", self.repo);
-        }
-        let script = format!("https://raw.githubusercontent.com/{}/{tag}/install.sh", self.repo);
-        let mut args = vec!["--version".to_string(), tag.to_string()];
-        if Self::nvim_plugin_installed() {
-            args.push("--nvim".into());
-        }
-        let pipeline = format!("curl -fsSL '{script}' | sh -s -- {}", args.join(" "));
+        let mut command = self.command(tag);
         // Without the bundle's PATH, the installer can't mistake the app's own
         // binary for another copy of tersh to replace.
-        let status = crate::unbundled(&mut Command::new("sh"))
-            .args(["-c", &pipeline])
+        let status = crate::unbundled(&mut command)
             .stdin(Stdio::null())
             .status()
             .context("running the installer")?;
