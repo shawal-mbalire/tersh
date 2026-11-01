@@ -21,6 +21,13 @@ pub trait Sink: Send + Sync + 'static {
     /// A rich-media message with its anchor resolved (see `tersh_domain::rich::resolve_anchor`).
     fn rich(&self, message: Value);
     fn event(&self, event: TermEvent);
+    /// Whether the UI calls [`Session::frame_shown`](crate::Session::frame_shown)
+    /// once it has drawn a frame. If so, the session keeps at most one frame in
+    /// flight, so a UI that paints slower than output arrives isn't sent frames
+    /// it would only throw away.
+    fn acks_frames(&self) -> bool {
+        false
+    }
 }
 
 // ---- time -------------------------------------------------------------------------

@@ -66,7 +66,7 @@ three OSes; `ci desktop` = the Tauri build and clippy on Linux.
 | TERM-13 | OSC 52 clipboard (e.g. from tmux or Neovim over ssh)                                    | `printf '\e]52;c;%s\a' "$(printf hi \| base64)"`, then paste                      |  ✅   |  🧪   |   🧪    |                            |
 | TERM-14 | Bell flashes the window                                                                 | `printf '\a'`                                                                     |  ✅   |  🧪   |   🧪    |                            |
 | TERM-15 | Resize reflows and resizes the PTY (`stty size` follows)                                | Resize the window; `stty size`                                                    |  ✅   |  🧪   |   🧪    |                            |
-| TERM-16 | Keystroke latency: echo is never delayed; heavy output is coalesced (~240 Hz)           | Type while `yes` runs in another pane                                             |  ✅   |  🧪   |   🧪    |                            |
+| TERM-16 | Keystroke latency: echo is never delayed; heavy output is coalesced to the paint rate   | Type while `yes` runs in another pane                                             |  ✅   |  🧪   |   🧪    |                            |
 | TERM-17 | Input is written in order on its own thread: a huge paste never freezes the window      | Paste 10 MB into `sleep 60`; the window stays responsive                          |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes) |
 
 ## Rendering (REN)
@@ -92,6 +92,7 @@ three OSes; `ci desktop` = the Tauri build and clippy on Linux.
 | PERF-04 | No leaks: heap is flat with full scrollback; closed sessions free everything, even if the shell ignores SIGHUP | `cargo test -p tersh-adapters --test memory`                               |  ✅   |  🧪   |   🧪    | cargo (memory), vitest (memory) |
 | PERF-05 | Replay a recording through the emulator to time parsing and frame building                                     | `cargo run --release -p tersh-adapters --example replay -- out.raw 120 40` |  ✅   |  🧪   |   🧪    |                                 |
 | PERF-06 | Output parses near the emulator's own speed even with full scrollback                                          | Fill the scrollback, then `cat` a 50 MB log; or run the `replay` example   |  ✅   |  🧪   |   🧪    | cargo (tersh-adapters scroll)   |
+| PERF-07 | One frame in flight: the page is never sent frames faster than it paints them                                  | Profiler while `seq 1500000` runs: frames/s stays near the display rate    |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes)      |
 
 ## Configuration and themes (CONF)
 

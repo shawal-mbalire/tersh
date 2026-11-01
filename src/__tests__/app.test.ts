@@ -63,6 +63,7 @@ function rig() {
     resize: vi.fn(async () => undefined),
     scroll: vi.fn(async (lines: number) => void scrolled.push(lines)),
     scrollToBottom: vi.fn(async () => undefined),
+    frameShown: vi.fn(async () => undefined),
     readClipboard: vi.fn(async () => "clip"),
     writeClipboard: vi.fn(async () => undefined),
     setTitle: vi.fn(async () => undefined),
@@ -187,6 +188,21 @@ describe("TerminalApp", () => {
     app.painted();
     app.painted();
     expect(backend.windowReady).toHaveBeenCalledTimes(1);
+  });
+
+  it("acknowledges each painted frame once, so the session sends the next", async () => {
+    const { app, backend, session } = rig();
+    await app.start();
+    app.painted();
+    expect(backend.frameShown).not.toHaveBeenCalled(); // nothing received yet
+    session().frame(frame());
+    session().frame(frame()); // two frames, one paint: one acknowledgement
+    app.painted();
+    app.painted();
+    expect(backend.frameShown).toHaveBeenCalledTimes(1);
+    session().frame(frame());
+    app.painted();
+    expect(backend.frameShown).toHaveBeenCalledTimes(2);
   });
 });
 

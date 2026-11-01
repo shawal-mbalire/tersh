@@ -32,6 +32,9 @@ export interface Backend {
   /** Scroll the viewport through history; positive is up. */
   scroll(lines: number): Promise<void>;
   scrollToBottom(): Promise<void>;
+  /** The last frame received has been drawn: the session may send the next.
+   *  It keeps one frame in flight, so frames never arrive faster than they are painted. */
+  frameShown(): Promise<void>;
   /** Profiling counters of the session (and the host process's memory). */
   stats(): Promise<SessionStats>;
 

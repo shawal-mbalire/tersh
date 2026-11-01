@@ -29,6 +29,9 @@ use crate::ports::{Measurement, TimePort,
 /// Minimum time between frames during heavy output (~240 Hz). The first frame
 /// after a quiet period is sent immediately, so keystroke echo is never delayed.
 const FRAME_INTERVAL: Duration = Duration::from_millis(4);
+/// How long a frame may go unacknowledged (see [`Sink::acks_frames`]) before
+/// the next is sent anyway, e.g. while a minimized window doesn't paint.
+const FRAME_ACK_TIMEOUT: Duration = Duration::from_millis(250);
 /// How much program output to read at once.
 const READ_BUFFER: usize = 64 * 1024;
 /// How long the render thread sleeps when nothing is pending; any output wakes it.
@@ -206,6 +209,10 @@ struct Shared {
     shell_pid: Option<u32>,
     wake: mpsc::Sender<()>,
     closed: AtomicBool,
+    /// A frame was sent and the UI hasn't said it was drawn yet.
+    in_flight: AtomicBool,
+    /// The render loop is holding back changes until the frame in flight is drawn.
+    stalled: AtomicBool,
     options: SessionOptions,
     clock: Arc<dyn TimePort>,
     started: Instant,
@@ -306,6 +313,8 @@ impl Session {
             shell_pid,
             wake,
             closed: AtomicBool::new(false),
+            in_flight: AtomicBool::new(false),
+            stalled: AtomicBool::new(false),
             options,
             started: ports.clock.now(),
             clock: ports.clock,
@@ -399,7 +408,18 @@ impl Session {
     /// Resend the whole viewport, e.g. after the renderer reloaded.
     pub fn refresh(&self) {
         lock(&self.shared.state).force_full = true;
+        // A reloaded page will never acknowledge the old page's frame.
+        self.shared.in_flight.store(false, Ordering::SeqCst);
         let _ = self.shared.wake.send(());
+    }
+
+    /// The UI has drawn the last frame it was sent (see [`Sink::acks_frames`]):
+    /// send the changes held back meanwhile, if any.
+    pub fn frame_shown(&self) {
+        self.shared.in_flight.store(false, Ordering::SeqCst);
+        if self.shared.stalled.swap(false, Ordering::SeqCst) {
+            let _ = self.shared.wake.send(());
+        }
     }
 
     pub fn info(&self) -> Info {
@@ -557,16 +577,33 @@ impl Shared {
     }
 
     fn render_loop(&self, wake: mpsc::Receiver<()>) {
+        let acks = self.host.sink.acks_frames();
         let mut last_frame = self.clock.now() - FRAME_INTERVAL;
         let mut last_sent: Option<Frame> = None;
+        let mut sent_at = last_frame;
         loop {
-            // Wake for new output, or when a synchronized update times out.
+            // Wake for new output, when a synchronized update times out, or
+            // when a frame in flight has waited too long to be acknowledged.
             let deadline = lock(&self.state).emulator.sync_deadline();
-            let wait = deadline.map_or(IDLE_WAIT, |d| d.saturating_duration_since(self.clock.now()));
+            let mut wait = deadline.map_or(IDLE_WAIT, |d| d.saturating_duration_since(self.clock.now()));
+            if self.stalled.load(Ordering::SeqCst) {
+                wait = wait.min(FRAME_ACK_TIMEOUT.saturating_sub(self.clock.now() - sent_at));
+            }
             match wake.recv_timeout(wait) {
                 Ok(()) | Err(RecvTimeoutError::Timeout) => {},
                 Err(RecvTimeoutError::Disconnected) => return,
             }
+            // One frame in flight: let changes pile up in the emulator until the
+            // UI has drawn it. `stalled` is set before checking again, so an
+            // acknowledgement in between either sees it and wakes us, or is seen here.
+            let held = acks && !self.closed.load(Ordering::SeqCst) && self.in_flight.load(Ordering::SeqCst);
+            if held && self.clock.now() - sent_at < FRAME_ACK_TIMEOUT {
+                self.stalled.store(true, Ordering::SeqCst);
+                if self.in_flight.load(Ordering::SeqCst) {
+                    continue;
+                }
+            }
+            self.stalled.store(false, Ordering::SeqCst);
             let since = self.clock.now() - last_frame;
             if since < FRAME_INTERVAL {
                 self.clock.sleep(FRAME_INTERVAL - since);
@@ -599,6 +636,10 @@ impl Shared {
                 frame.lines = lines;
                 add(&self.host.counters.frames_sent, 1);
                 add(&self.host.counters.rows_sent, frame.lines.len() as u64);
+                if acks {
+                    self.in_flight.store(true, Ordering::SeqCst);
+                    sent_at = last_frame;
+                }
                 self.host.sink.frame(frame);
             } else {
                 add(&self.host.counters.frames_skipped, 1);

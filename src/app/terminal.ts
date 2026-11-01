@@ -48,6 +48,8 @@ export class TerminalApp<K extends KeyLike = KeyLike> {
   private started = false;
   /** Whether the host was told the first frame is on screen. */
   private ready = false;
+  /** A frame arrived that hasn't been painted (and acknowledged) yet. */
+  private unpainted = false;
   /** Whether the last key pressed was the space bar (see `normalizeTyped`). */
   private spaceKey = false;
   /** Mouse button held while reporting to the program. */
@@ -93,9 +95,13 @@ export class TerminalApp<K extends KeyLike = KeyLike> {
     void this.backend.windowReady().catch(() => undefined);
   }
 
-  /** A frame is on screen. */
+  /** The screen was painted: tell the session the frames received so far are
+   *  on screen, so it sends the next one. */
   painted() {
     if (this.frame) this.windowReady();
+    if (!this.unpainted) return;
+    this.unpainted = false;
+    void this.backend.frameShown().catch(() => undefined);
   }
 
   write(text: string): Promise<void> {
@@ -270,6 +276,7 @@ export class TerminalApp<K extends KeyLike = KeyLike> {
 
   private receiveFrame(frame: Frame) {
     this.frame = frame;
+    this.unpainted = true;
     this.screen.show(frame);
     this.events.emit("frame", frame);
   }

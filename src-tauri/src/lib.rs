@@ -66,6 +66,11 @@ impl Sink for ChannelSink {
             }
         }
     }
+
+    /// The page acknowledges each frame once drawn (`session_frame_shown`).
+    fn acks_frames(&self) -> bool {
+        true
+    }
 }
 
 struct AppState {
@@ -147,6 +152,12 @@ fn session_resize(state: State<'_, AppState>, cols: u16, rows: u16, cell_width: 
 #[tauri::command]
 fn session_scroll(state: State<'_, AppState>, lines: i32) -> CmdResult<()> {
     with_session(&state, |s| s.scroll(lines))
+}
+
+/// The page has drawn the last frame it was sent.
+#[tauri::command]
+fn session_frame_shown(state: State<'_, AppState>) -> CmdResult<()> {
+    with_session(&state, |s| s.frame_shown())
 }
 
 #[tauri::command]
@@ -247,6 +258,7 @@ pub fn run(launch: cli::Launch, env: environment::Environment) {
             session_resize,
             session_scroll,
             session_scroll_to_bottom,
+            session_frame_shown,
             session_stats,
             window_ready,
             cards::card_html_put,

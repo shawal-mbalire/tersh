@@ -36,6 +36,10 @@ export class TauriBackend implements Backend {
     return invoke<void>("session_scroll_to_bottom");
   }
 
+  frameShown() {
+    return invoke<void>("session_frame_shown");
+  }
+
   stats() {
     return invoke<SessionStats>("session_stats");
   }

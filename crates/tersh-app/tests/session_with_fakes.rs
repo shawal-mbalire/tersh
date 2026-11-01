@@ -176,6 +176,8 @@ struct Recorder {
     frames: Mutex<Vec<Frame>>,
     rich: Mutex<Vec<Value>>,
     events: Mutex<Vec<TermEvent>>,
+    /// Acknowledge frames, as the desktop page does.
+    acks: bool,
 }
 
 impl Sink for Recorder {
@@ -187,6 +189,9 @@ impl Sink for Recorder {
     }
     fn event(&self, event: TermEvent) {
         self.events.lock().unwrap().push(event);
+    }
+    fn acks_frames(&self) -> bool {
+        self.acks
     }
 }
 
@@ -232,6 +237,11 @@ fn start() -> Rig {
     start_with(Arc::new(SystemClock), None)
 }
 
+/// A session whose UI acknowledges frames.
+fn start_acking() -> Rig {
+    build(Arc::new(SystemClock), None, Recorder { acks: true, ..Default::default() })
+}
+
 struct SystemClock;
 impl TimePort for SystemClock {
     fn now(&self) -> Instant {
@@ -244,6 +254,10 @@ impl TimePort for SystemClock {
 
 /// A session on `clock`, its emulators measured on `instrument` when given.
 fn start_with(clock: Arc<dyn TimePort>, instrument: Option<Arc<dyn TimePort>>) -> Rig {
+    build(clock, instrument, Recorder::default())
+}
+
+fn build(clock: Arc<dyn TimePort>, instrument: Option<Arc<dyn TimePort>>, recorder: Recorder) -> Rig {
     let (tx, rx) = mpsc::channel();
     let pty = Arc::new(FakePty {
         output: Mutex::new(Some(rx)),
@@ -251,7 +265,7 @@ fn start_with(clock: Arc<dyn TimePort>, instrument: Option<Arc<dyn TimePort>>) -
         ..Default::default()
     });
     let emulators = Arc::new(FakeEmulators::default());
-    let recorder = Arc::new(Recorder::default());
+    let recorder = Arc::new(recorder);
     let mut options = SessionOptions::from_config(&Config::default(), 80, 24);
     options.rich_socket = Some("/run/tersh.sock".into());
     let session = match instrument {
@@ -293,6 +307,54 @@ fn frames_that_change_nothing_are_not_sent() {
     session.refresh();
     eventually("full frame", || recorder.frames.lock().unwrap().len() == 2);
     assert!(recorder.frames.lock().unwrap()[1].full);
+}
+
+#[test]
+fn an_acking_ui_gets_one_frame_in_flight() {
+    let (session, output, _pty, _emulators, recorder) = start_acking();
+    let frames = || recorder.frames.lock().unwrap().len();
+    output.send(b"a".to_vec()).unwrap();
+    eventually("first frame", || frames() == 1);
+
+    // Changes made before the UI has drawn the frame are held back...
+    session.resize(100, 30, 8, 16).unwrap();
+    std::thread::sleep(Duration::from_millis(50));
+    assert_eq!(frames(), 1);
+    // ...and sent as soon as it has.
+    session.frame_shown();
+    eventually("held frame", || frames() == 2);
+    assert!(recorder.frames.lock().unwrap()[1].full);
+
+    // A drawn frame with nothing new to show sends nothing.
+    session.frame_shown();
+    std::thread::sleep(Duration::from_millis(50));
+    assert_eq!(frames(), 2);
+}
+
+#[test]
+fn unacknowledged_frames_are_followed_after_a_timeout() {
+    let (session, output, _pty, _emulators, recorder) = start_acking();
+    let frames = || recorder.frames.lock().unwrap().len();
+    output.send(b"a".to_vec()).unwrap();
+    eventually("first frame", || frames() == 1);
+    let held = Instant::now();
+    session.resize(100, 30, 8, 16).unwrap();
+    // The UI never answers (e.g. a minimized window doesn't paint).
+    eventually("frame after the timeout", || frames() == 2);
+    assert!(held.elapsed() >= Duration::from_millis(200), "sent after {:?}", held.elapsed());
+}
+
+#[test]
+fn a_refresh_does_not_wait_for_the_old_page() {
+    let (session, output, _pty, _emulators, recorder) = start_acking();
+    let frames = || recorder.frames.lock().unwrap().len();
+    output.send(b"a".to_vec()).unwrap();
+    eventually("first frame", || frames() == 1);
+    // The page reloaded: the frame in flight will never be acknowledged.
+    let start = Instant::now();
+    session.refresh();
+    eventually("full frame", || frames() == 2);
+    assert!(start.elapsed() < Duration::from_millis(200), "waited {:?}", start.elapsed());
 }
 
 #[test]
