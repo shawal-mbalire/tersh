@@ -78,11 +78,14 @@ pub fn build<T: EventListener>(term: &mut Term<T>, scroll_base: u64, force_full:
     }
 }
 
-/// Text of a grid line (negative lines are history), used for scroll tracking.
-pub fn row_text<T>(term: &Term<T>, line: i32) -> String {
+/// Feed the characters of a grid line (negative lines are history) to `hasher`,
+/// without building a string. Used for scroll tracking.
+pub fn hash_row<T, H: std::hash::Hasher>(term: &Term<T>, line: i32, hasher: &mut H) {
     let cols = term.columns();
     let row = &term.grid()[Line(line)];
-    (0..cols).map(|x| row[Column(x)].c).collect()
+    for x in 0..cols {
+        hasher.write_u32(row[Column(x)].c as u32);
+    }
 }
 
 fn encode(color: Color, colors: &Colors) -> u32 {

@@ -9,6 +9,7 @@ import { type ActionHandler, Emitter, type GridInfo, type KeyHandler, type RichH
 import { encodeKey, encodeMouse, encodePaste, type MouseAction, normalizeTyped } from "../domain/input";
 import { Palette } from "../domain/palette";
 import { GridRenderer } from "./renderer";
+import { Profiler } from "./profiler";
 import type { Binding, Config, Frame, TermEvent } from "../domain/types";
 import type { Backend } from "../ports/backend";
 import { Mode } from "../domain/types";
@@ -42,6 +43,9 @@ export class Terminal {
   private selecting = false;
   private fontSize: number;
   private started = false;
+  /** Whether the host was told the first frame is on screen. */
+  private ready = false;
+  private readonly profiler: Profiler;
 
   constructor(
     private config: Config,
@@ -65,6 +69,11 @@ export class Terminal {
       config.window.opacity,
     );
     this.cards = new CardManager(els.cards, (message) => this.notify(message, "error"));
+    this.profiler = new Profiler(
+      document.body,
+      () => backend.stats(),
+      () => this.cards.ids.length,
+    );
     for (const [kind, renderer] of Object.entries(builtinRenderers)) this.cards.renderers.set(kind, renderer);
     this.bindings = resolveKeybindings(config.keybindings, isMac);
     this.registerBuiltinActions();
@@ -90,10 +99,20 @@ export class Terminal {
     this.started = true;
     new ResizeObserver(() => this.scheduleResize()).observe(this.els.terminal);
     this.els.input.focus();
+    // A hidden window may not run animation frames, so don't wait on a paint forever.
+    setTimeout(() => this.windowReady(), 300);
+  }
+
+  /** Let the host show the window (it starts hidden so it never flashes empty). */
+  windowReady() {
+    if (this.ready) return;
+    this.ready = true;
+    void this.backend.windowReady().catch(() => undefined);
   }
 
   write(text: string): Promise<void> {
     this.clearSelection();
+    this.profiler.input();
     return this.backend.write(text);
   }
 
@@ -177,6 +196,7 @@ export class Terminal {
       reload_config: () => void this.backend.reloadConfig().catch(notifyError),
       open_config: () => void this.backend.openConfig().catch(notifyError),
       restart: () => void this.backend.restart().catch(notifyError),
+      toggle_profiler: () => this.profiler.toggle(),
     };
     for (const [name, handler] of Object.entries(builtins)) this.actions.set(name, handler);
   }
@@ -194,6 +214,7 @@ export class Terminal {
   private onFrame(frame: Frame) {
     const scrolled = this.renderer.frame && this.renderer.frame.display_offset !== frame.display_offset;
     this.renderer.apply(frame);
+    this.profiler.frame();
     if (scrolled) this.clearSelection();
     this.events.emit("frame", frame);
     this.schedulePaint();
@@ -204,6 +225,7 @@ export class Terminal {
     this.paintPending = true;
     requestAnimationFrame(() => {
       this.paintPending = false;
+      const start = performance.now();
       this.renderer.draw();
       const frame = this.renderer.frame;
       if (frame) {
@@ -211,6 +233,8 @@ export class Terminal {
         this.placeInput(frame);
       }
       this.drawSelection();
+      this.profiler.painted(start, performance.now());
+      if (frame) this.windowReady();
     });
   }
 
@@ -248,8 +272,8 @@ export class Terminal {
         this.notify(`rich message rejected: ${event.error}`, "error");
         break;
       case "exit":
+        // The backend closes the window itself once the program has exited.
         this.events.emit("exit", event.code);
-        void this.backend.closeWindow();
         break;
     }
   }
@@ -257,8 +281,14 @@ export class Terminal {
   // ---- geometry ------------------------------------------------------------
 
   private measureGrid() {
-    const { clientWidth, clientHeight } = this.els.terminal;
-    return this.renderer.fit(clientWidth, clientHeight);
+    let { clientWidth: width, clientHeight: height } = this.els.terminal;
+    if (width === 0 || height === 0) {
+      // Not laid out yet (e.g. the window is still hidden): use the window's size less the padding.
+      const { offsetLeft, offsetTop } = this.els.terminal;
+      width = window.innerWidth - 2 * offsetLeft;
+      height = window.innerHeight - 2 * offsetTop;
+    }
+    return this.renderer.fit(width, height);
   }
 
   private scheduleResize() {
@@ -613,6 +643,10 @@ export class Terminal {
         };
       },
       notify: (message, level) => terminal.notify(message, level),
+      async profile() {
+        const session = await terminal.backend.stats().catch(() => null);
+        return { ui: terminal.profiler.snapshot(), session };
+      },
       addStyle(css: string) {
         const style = document.createElement("style");
         style.textContent = css;

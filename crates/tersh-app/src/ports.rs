@@ -82,6 +82,10 @@ pub trait ProcessInspector: Send + Sync {
     fn name(&self, pid: u32) -> Option<String>;
     /// Current working directory.
     fn cwd(&self, pid: u32) -> Option<PathBuf>;
+    /// Resident memory in bytes, where the platform reports it.
+    fn memory(&self, _pid: u32) -> Option<u64> {
+        None
+    }
 }
 
 // ---- terminal emulation ------------------------------------------------------------

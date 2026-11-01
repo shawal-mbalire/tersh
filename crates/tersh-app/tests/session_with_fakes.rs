@@ -165,12 +165,15 @@ impl EmulatorFactory for FakeEmulators {
 
 #[derive(Default)]
 struct Recorder {
+    frames: Mutex<Vec<Frame>>,
     rich: Mutex<Vec<Value>>,
     events: Mutex<Vec<TermEvent>>,
 }
 
 impl Sink for Recorder {
-    fn frame(&self, _: Frame) {}
+    fn frame(&self, frame: Frame) {
+        self.frames.lock().unwrap().push(frame);
+    }
     fn rich(&self, message: Value) {
         self.rich.lock().unwrap().push(message);
     }
@@ -211,6 +214,24 @@ fn osc_messages_are_split_out_and_anchored_at_the_cursor() {
     let msg = recorder.rich.lock().unwrap()[0].clone();
     assert_eq!(msg["anchor"]["screen"], "alt");
     assert_eq!((msg["anchor"]["line"].as_u64(), msg["anchor"]["col"].as_u64()), (Some(3), Some(7)));
+}
+
+#[test]
+fn frames_that_change_nothing_are_not_sent() {
+    let (session, output, _pty, emulators, recorder) = start();
+    output.send(b"a".to_vec()).unwrap();
+    eventually("first frame", || !recorder.frames.lock().unwrap().is_empty());
+
+    // The fake emulator's frames never change, so this output sends nothing new.
+    output.send(b"b".to_vec()).unwrap();
+    eventually("output", || emulators.fed.0.lock().unwrap().as_slice() == b"ab");
+    std::thread::sleep(Duration::from_millis(50));
+    assert_eq!(recorder.frames.lock().unwrap().len(), 1);
+
+    // A refresh always repaints.
+    session.refresh();
+    eventually("full frame", || recorder.frames.lock().unwrap().len() == 2);
+    assert!(recorder.frames.lock().unwrap()[1].full);
 }
 
 #[test]
@@ -274,7 +295,7 @@ fn emulator_replies_reach_the_program() {
     let host = emulators.host.lock().unwrap().clone().unwrap();
     host.reply("\x1b[?62c");
     session.write(b"ls\r").unwrap();
-    assert_eq!(pty.input.0.lock().unwrap().as_slice(), b"\x1b[?62cls\r");
+    eventually("input", || pty.input.0.lock().unwrap().as_slice() == b"\x1b[?62cls\r");
     assert_eq!(host.color(257), tersh_domain::Palette::from_theme(&Config::default().theme).background);
 }
 
@@ -288,4 +309,52 @@ fn reports_the_foreground_program_and_shell_directory() {
         tersh_domain::update::restart_decision(&fg),
         tersh_domain::update::Restart::Wait { busy: "nvim".into() }
     );
+}
+
+#[test]
+fn input_is_written_in_order() {
+    let (session, _output, pty, _emulators, _recorder) = start();
+    let mut expected = Vec::new();
+    for i in 0..2000 {
+        let chunk = format!("{i},");
+        session.write(chunk.as_bytes()).unwrap();
+        expected.extend_from_slice(chunk.as_bytes());
+    }
+    eventually("all input", || pty.input.0.lock().unwrap().len() == expected.len());
+    assert_eq!(*pty.input.0.lock().unwrap(), expected);
+}
+
+#[test]
+fn stats_count_output_frames_and_input() {
+    let (session, output, _pty, _emulators, _recorder) = start();
+    output.send(b"hello".to_vec()).unwrap();
+    session.write(b"ls\r").unwrap();
+    eventually("stats", || {
+        let stats = session.stats();
+        stats.output_bytes == 5 && stats.frames_sent >= 1 && stats.input_bytes == 3
+    });
+    let stats = session.stats();
+    assert_eq!((stats.output_reads, stats.input_pending), (1, 0));
+    assert!(stats.frames_built >= stats.frames_sent);
+
+    let reply = session.rich_inbox().handle(br#"{"op":"stats"}"#).unwrap();
+    assert_eq!(reply["ok"], true);
+    assert_eq!(reply["output_bytes"], 5);
+}
+
+/// Memory leak check: once dropped, a session's threads finish and its
+/// screen, scrollback and buffers are freed.
+#[test]
+fn dropped_sessions_are_released() {
+    for _ in 0..20 {
+        let (session, output, _pty, _emulators, _recorder) = start();
+        output.send(b"some output".to_vec()).unwrap();
+        session.write(b"input").unwrap();
+        let inbox = session.rich_inbox();
+        drop(session);
+        // The program's output ends once it has been killed.
+        drop(output);
+        eventually("session released", || inbox.is_released());
+        assert!(inbox.handle(br#"{"op":"info"}"#).is_none());
+    }
 }

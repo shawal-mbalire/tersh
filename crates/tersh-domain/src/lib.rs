@@ -9,6 +9,7 @@ pub mod event;
 pub mod frame;
 pub mod palette;
 pub mod rich;
+pub mod stats;
 pub mod theme;
 pub mod update;
 
@@ -16,4 +17,5 @@ pub use config::Config;
 pub use event::{Info, TermEvent, WindowSize};
 pub use frame::Frame;
 pub use palette::{Palette, Rgb};
+pub use stats::Stats;
 pub use theme::{Theme, ThemeSource};

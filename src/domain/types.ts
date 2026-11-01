@@ -48,6 +48,25 @@ export interface Metrics {
   baseline: number;
 }
 
+/** Profiling counters from the backend: totals since the session started (see `tersh_domain::Stats`). */
+export interface SessionStats {
+  uptime_ms: number;
+  output_bytes: number;
+  output_reads: number;
+  parse_us: number;
+  frames_built: number;
+  frames_sent: number;
+  frames_skipped: number;
+  rows_sent: number;
+  build_us: number;
+  build_max_us: number;
+  input_bytes: number;
+  input_writes: number;
+  input_pending: number;
+  history: number;
+  memory_bytes: number | null;
+}
+
 export interface SessionInfo {
   version: string;
   cols: number;

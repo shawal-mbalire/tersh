@@ -51,6 +51,7 @@ export function defaultKeybindings(mac: boolean): Record<string, Binding> {
     [`${primary}+r`]: "reload_config",
     [`${zoom}+,`]: "open_config",
     [`${primary}+f5`]: "restart",
+    [`${primary}+p`]: "toggle_profiler",
   };
 }
 

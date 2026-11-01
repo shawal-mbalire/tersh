@@ -9,12 +9,12 @@
 //! the size of the window we compare).
 
 use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
+use std::hash::Hasher;
 
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::term::{Term, TermMode};
 
-use super::frame::row_text;
+use super::frame::hash_row;
 
 #[derive(Debug, Default)]
 pub struct ScrollTracker {
@@ -71,7 +71,7 @@ fn history_hashes<T>(term: &Term<T>, count: usize) -> Vec<u64> {
         .rev()
         .map(|i| {
             let mut h = DefaultHasher::new();
-            row_text(term, -i).hash(&mut h);
+            hash_row(term, -i, &mut h);
             h.finish()
         })
         .collect()

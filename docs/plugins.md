@@ -59,6 +59,7 @@ export function activate(tersh) {
 | `cards.show/update/close/clear/list` | Manage cards directly (same messages as [the protocol](protocol.md)).                                                                          |
 | `grid()`                             | Columns, rows, cell size in pixels, cursor, alternate-screen flag, `rowText(y)`.                                                               |
 | `notify(message, level?)`            | Show a toast (`"info"` or `"error"`).                                                                                                          |
+| `profile()`                          | Profiling numbers: `{ ui, session }`, what the page measured (paint, latency, frames) and the session's counters.                              |
 | `addStyle(css)`                      | Add a stylesheet.                                                                                                                              |
 
 Every `register*`, `on*` and `addStyle` call returns `{ dispose() }`.

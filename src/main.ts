@@ -18,8 +18,9 @@ function reportWarnings(terminal: Terminal, settings: Settings) {
   if (warnings.length > 3) terminal.notify(`…and ${warnings.length - 3} more problems in ${settings.config_path}`, "error");
 }
 
+const backend = new TauriBackend();
+
 async function main() {
-  const backend = new TauriBackend();
   setDocumentHost(backend.cardDocuments);
   const settings = await backend.getSettings();
   applySettings(settings);
@@ -77,4 +78,5 @@ main().catch((e) => {
   console.error(e);
   document.body.textContent = `tersh failed to start: ${e instanceof Error ? e.message : String(e)}`;
   document.body.classList.add("fatal");
+  void backend.windowReady().catch(() => undefined);
 });

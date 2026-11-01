@@ -33,17 +33,17 @@ Setting `rich.osc = false` makes tersh accept cards only from the socket. Then
 }
 ```
 
-| Field    | Meaning                                                                                                                    |
-| -------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `op`     | `show` (default), `update`, `move`, `close`, `clear`, `info` (socket only: returns the grid size and cursor)               |
-| `id`     | Card id. `show` with an existing id replaces that card. Omit it for a generated id.                                        |
-| `kind`   | Renderer: `text`, `json`, `markdown`, `image`, `video`, `svg`, `html`, `plotly`, `notebook`, `output`, or a plugin's kind. |
-| `data`   | Content (see below).                                                                                                       |
-| `title`  | Title shown in the card's header.                                                                                          |
-| `chrome` | `false` hides the header and frame.                                                                                        |
-| `hidden` | `true` keeps the card but doesn't draw it (e.g. its line scrolled out of an editor window).                                |
-| `anchor` | Where the card goes (see below). `update` and `move` without `anchor` keep the current one.                                |
-| `screen` | For `clear`: only clear `"primary"` or `"alt"` cards.                                                                      |
+| Field    | Meaning                                                                                                                                                             |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `op`     | `show` (default), `update`, `move`, `close`, `clear`, `info` (socket only: returns the grid size and cursor), `stats` (socket only: returns the profiling counters) |
+| `id`     | Card id. `show` with an existing id replaces that card. Omit it for a generated id.                                                                                 |
+| `kind`   | Renderer: `text`, `json`, `markdown`, `image`, `video`, `svg`, `html`, `plotly`, `notebook`, `output`, or a plugin's kind.                                          |
+| `data`   | Content (see below).                                                                                                                                                |
+| `title`  | Title shown in the card's header.                                                                                                                                   |
+| `chrome` | `false` hides the header and frame.                                                                                                                                 |
+| `hidden` | `true` keeps the card but doesn't draw it (e.g. its line scrolled out of an editor window).                                                                         |
+| `anchor` | Where the card goes (see below). `update` and `move` without `anchor` keep the current one.                                                                         |
+| `screen` | For `clear`: only clear `"primary"` or `"alt"` cards.                                                                                                               |
 
 `update` replaces `data` (and any other fields given). It creates the card if
 it doesn't exist and `kind` is given. `move` changes only `anchor` and `hidden`.

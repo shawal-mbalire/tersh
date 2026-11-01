@@ -1,7 +1,8 @@
 // The API handed to plugins (and used by the built-in features).
 
 import type { CardRenderer, RichMessage } from "../cards/manager";
-import type { Config, Frame } from "../../domain/types";
+import type { Config, Frame, SessionStats } from "../../domain/types";
+import type { UiProfile } from "../../domain/profile";
 
 export interface Disposable {
   dispose(): void;
@@ -68,6 +69,8 @@ export interface TershAPI {
   grid(): GridInfo;
   notify(message: string, level?: "info" | "error"): void;
   addStyle(css: string): Disposable;
+  /** Profiling numbers: what the page measured, and the session's counters (`null` without a session). */
+  profile(): Promise<{ ui: UiProfile; session: SessionStats | null }>;
 }
 
 export class Emitter {

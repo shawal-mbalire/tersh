@@ -81,9 +81,31 @@ npm install
 npm run tauri dev        # or: npm run tauri build
 ```
 
-Linux needs the WebKitGTK development packages: `webkit2gtk4.1-devel` and
-`libsoup3-devel` on Fedora, or `libwebkit2gtk-4.1-dev` on Debian/Ubuntu.
-Install `tersh-show` with `cargo install --path crates/tersh-show`.
+Linux needs the WebKitGTK development packages. `scripts/setup-linux.sh`
+installs them (dnf, apt or pacman); with `--toolbox` it sets up a Fedora
+toolbox instead, for immutable systems or when you'd rather not install them on
+the host, and prints how to build inside it. Install `tersh-show` with
+`cargo install --path crates/tersh-show`.
+
+### Profiling and memory
+
+Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> (`toggle_profiler`) for an
+overlay with paint time, key-to-screen latency, frames sent and skipped,
+output throughput, parse and frame-build time, and the app's resident memory.
+The same session counters are available over the socket
+(`{"op":"stats"}`) and to plugins (`tersh.profile()`).
+
+To profile the emulator alone, record a program's output and replay it:
+
+```sh
+script -q -f out.raw -c claude
+cargo run --release -p tersh-adapters --example replay -- out.raw 120 40 --screen
+```
+
+`cargo test -p tersh-adapters --test memory` checks for leaks: the heap stays
+flat while scrollback churns, and returns to its baseline after many sessions
+are opened and closed. `src/__tests__/memory.test.ts` does the same for cards,
+listeners and the profiler in the page.
 
 ## Configuration
 
@@ -215,6 +237,7 @@ separately.
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd>                | `clear_cards`                         |
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>                | `reload_config`                       |
 | <kbd>Ctrl</kbd>+<kbd>,</kbd>                                 | `open_config`                         |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>                | `toggle_profiler`                     |
 
 `scroll_top` and `scroll_bottom` are also available. Plugins can add actions
 (for example `myplugin.toggle`) that you bind the same way. Combos are written
