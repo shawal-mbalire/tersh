@@ -93,6 +93,7 @@ three OSes; `ci desktop` = the Tauri build and clippy on Linux.
 | PERF-05 | Replay a recording through the emulator to time parsing and frame building                                     | `cargo run --release -p tersh-adapters --example replay -- out.raw 120 40` |  ✅   |  🧪   |   🧪    |                                 |
 | PERF-06 | Output parses near the emulator's own speed even with full scrollback                                          | Fill the scrollback, then `cat` a 50 MB log; or run the `replay` example   |  ✅   |  🧪   |   🧪    | cargo (tersh-adapters scroll)   |
 | PERF-07 | One frame in flight: the page is never sent frames faster than it paints them                                  | Profiler while `seq 1500000` runs: frames/s stays near the display rate    |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes)      |
+| PERF-08 | Typing and scrolling never wait for output parsing                                                             | Type while `seq 4000000` runs: keys echo without stutter                   |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes)      |
 
 ## Configuration and themes (CONF)
 

@@ -119,27 +119,38 @@ impl PtySystem for FakePty {
     }
 }
 
-/// Records what it is fed; the cursor is always at row 3, column 7 of the alternate screen.
+/// Records what it is fed and how it is scrolled; the cursor is always at
+/// row 3, column 7 of the alternate screen.
 #[derive(Default)]
 struct FakeEmulators {
     fed: Shared,
+    scrolls: Arc<Mutex<Vec<Scroll>>>,
+    /// When set, the next output is parsed only once the test sends on it.
+    gate: Arc<Mutex<Option<Receiver<()>>>>,
     host: Mutex<Option<Arc<dyn TermHost>>>,
 }
 
-struct FakeEmulator(Shared);
+struct FakeEmulator {
+    fed: Shared,
+    scrolls: Arc<Mutex<Vec<Scroll>>>,
+    gate: Arc<Mutex<Option<Receiver<()>>>>,
+}
 
 impl Emulator for FakeEmulator {
     fn advance(&mut self, bytes: &[u8]) {
-        self.0.write_all(bytes).unwrap();
+        self.fed.write_all(bytes).unwrap();
+        let gate = self.gate.lock().unwrap().take();
+        if let Some(gate) = gate {
+            let _ = gate.recv();
+        }
     }
     fn sync_deadline(&self) -> Option<Instant> {
         None
     }
     fn flush_sync(&mut self) {}
     fn resize(&mut self, _: u16, _: u16) {}
-    fn scroll(&mut self, _: Scroll) {}
-    fn display_offset(&self) -> usize {
-        0
+    fn scroll(&mut self, scroll: Scroll) {
+        self.scrolls.lock().unwrap().push(scroll);
     }
     fn anchor_context(&self) -> AnchorContext {
         AnchorContext { screen: Screen::Alt, cursor_row: 3, cursor_col: 7, scroll_base: 0 }
@@ -167,7 +178,7 @@ impl Emulator for FakeEmulator {
 impl EmulatorFactory for FakeEmulators {
     fn create(&self, _: &EmulatorOptions, host: Arc<dyn TermHost>) -> Box<dyn Emulator> {
         *self.host.lock().unwrap() = Some(host);
-        Box::new(FakeEmulator(self.fed.clone()))
+        Box::new(FakeEmulator { fed: self.fed.clone(), scrolls: self.scrolls.clone(), gate: self.gate.clone() })
     }
 }
 
@@ -445,6 +456,35 @@ fn input_is_written_in_order() {
     }
     eventually("all input", || pty.input.0.lock().unwrap().len() == expected.len());
     assert_eq!(*pty.input.0.lock().unwrap(), expected);
+}
+
+#[test]
+fn input_and_scrolling_never_wait_for_output_parsing() {
+    let (session, output, pty, emulators, _recorder) = start();
+    let (release, gate) = mpsc::channel();
+    *emulators.gate.lock().unwrap() = Some(gate);
+    output.send(b"slow".to_vec()).unwrap();
+    eventually("parsing to start", || emulators.fed.0.lock().unwrap().as_slice() == b"slow");
+
+    // The reader is stuck parsing, holding the screen. On another thread, so
+    // a session that waits for it fails the test rather than hanging it.
+    let ui = std::thread::spawn(move || {
+        session.scroll(3);
+        session.write(b"x").unwrap();
+        session
+    });
+    eventually("input", || pty.input.0.lock().unwrap().as_slice() == b"x");
+    assert!(emulators.scrolls.lock().unwrap().is_empty(), "scrolls wait for the parse");
+
+    release.send(()).unwrap();
+    // Typing brings the scrolled viewport back to the bottom.
+    eventually("scrolls", || *emulators.scrolls.lock().unwrap() == [Scroll::Lines(3), Scroll::Bottom]);
+    let session = ui.join().unwrap();
+    session.write(b"y").unwrap();
+    eventually("more input", || pty.input.0.lock().unwrap().as_slice() == b"xy");
+    // Not scrolled since: nothing more to undo.
+    std::thread::sleep(Duration::from_millis(20));
+    assert_eq!(emulators.scrolls.lock().unwrap().len(), 2);
 }
 
 #[test]

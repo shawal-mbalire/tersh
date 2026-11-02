@@ -167,8 +167,9 @@ fn list_plugins(state: State<'_, AppState>) -> Vec<Plugin> {
 }
 
 /// Profiling counters for the profiler overlay, with this process's memory.
+/// Async, so reading the memory off `/proc` happens off the main thread.
 #[tauri::command]
-fn session_stats(state: State<'_, AppState>) -> CmdResult<Stats> {
+async fn session_stats(state: State<'_, AppState>) -> CmdResult<Stats> {
     let mut stats = with_session(&state, |s| s.stats())?;
     stats.memory_bytes = SystemProcesses.memory(std::process::id());
     Ok(stats)

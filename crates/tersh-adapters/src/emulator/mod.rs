@@ -68,10 +68,6 @@ impl Emulator for AlacrittyEmulator {
         });
     }
 
-    fn display_offset(&self) -> usize {
-        self.term.grid().display_offset()
-    }
-
     fn anchor_context(&self) -> AnchorContext {
         let point = self.term.grid().cursor.point;
         AnchorContext {

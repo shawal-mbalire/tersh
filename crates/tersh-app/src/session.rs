@@ -213,6 +213,13 @@ struct Shared {
     in_flight: AtomicBool,
     /// The render loop is holding back changes until the frame in flight is drawn.
     stalled: AtomicBool,
+    /// Viewport scrolls for the render loop to apply, in order. Input and
+    /// scrolling queue them here rather than wait for `state`, which the
+    /// reader holds while it parses.
+    scrolls: Mutex<Vec<Scroll>>,
+    /// The viewport may be scrolled into history (set by every scroll up or
+    /// down, so it may be stale-true but never stale-false).
+    maybe_scrolled: AtomicBool,
     options: SessionOptions,
     clock: Arc<dyn TimePort>,
     started: Instant,
@@ -315,6 +322,8 @@ impl Session {
             closed: AtomicBool::new(false),
             in_flight: AtomicBool::new(false),
             stalled: AtomicBool::new(false),
+            scrolls: Mutex::new(Vec::new()),
+            maybe_scrolled: AtomicBool::new(false),
             options,
             started: ports.clock.now(),
             clock: ports.clock,
@@ -365,15 +374,12 @@ impl Session {
         self.shared.options.rich_socket.as_ref()
     }
 
-    /// Send input (keystrokes, pastes, mouse reports) to the program.
+    /// Send input (keystrokes, pastes, mouse reports) to the program, and
+    /// bring a viewport scrolled into history back to the bottom. Never waits
+    /// for output parsing.
     pub fn write(&self, bytes: &[u8]) -> Result<()> {
-        {
-            let mut state = lock(&self.shared.state);
-            if state.emulator.display_offset() != 0 {
-                state.emulator.scroll(Scroll::Bottom);
-                drop(state);
-                let _ = self.shared.wake.send(());
-            }
+        if self.shared.maybe_scrolled.swap(false, Ordering::SeqCst) {
+            self.shared.queue_scroll(Scroll::Bottom);
         }
         if !self.shared.host.send(bytes) {
             return Err(AppError::new(Code::InputClosed, "the program's input is closed"));
@@ -395,14 +401,14 @@ impl Session {
     }
 
     /// Scroll the viewport through history by `lines` (positive is up).
+    /// Applied by the render thread before its next frame, so it never waits for output parsing.
     pub fn scroll(&self, lines: i32) {
-        lock(&self.shared.state).emulator.scroll(Scroll::Lines(lines));
-        let _ = self.shared.wake.send(());
+        self.shared.maybe_scrolled.store(true, Ordering::SeqCst);
+        self.shared.queue_scroll(Scroll::Lines(lines));
     }
 
     pub fn scroll_to_bottom(&self) {
-        lock(&self.shared.state).emulator.scroll(Scroll::Bottom);
-        let _ = self.shared.wake.send(());
+        self.shared.queue_scroll(Scroll::Bottom);
     }
 
     /// Resend the whole viewport, e.g. after the renderer reloaded.
@@ -475,6 +481,11 @@ impl Drop for Session {
 }
 
 impl Shared {
+    fn queue_scroll(&self, scroll: Scroll) {
+        lock(&self.scrolls).push(scroll);
+        let _ = self.wake.send(());
+    }
+
     fn process(&self, bytes: &[u8]) {
         let mut messages = Vec::new();
         {
@@ -613,6 +624,9 @@ impl Shared {
             let mut frame = {
                 let mut state = lock(&self.state);
                 let State { emulator, force_full, .. } = &mut *state;
+                for scroll in std::mem::take(&mut *lock(&self.scrolls)) {
+                    emulator.scroll(scroll);
+                }
                 if let Some(deadline) = emulator.sync_deadline() {
                     if self.clock.now() < deadline {
                         // Mid synchronized update: wait for it to finish.

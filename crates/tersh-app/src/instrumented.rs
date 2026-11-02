@@ -62,9 +62,6 @@ impl Emulator for Measured {
     fn scroll(&mut self, scroll: Scroll) {
         self.inner.scroll(scroll);
     }
-    fn display_offset(&self) -> usize {
-        self.inner.display_offset()
-    }
     fn anchor_context(&self) -> AnchorContext {
         self.inner.anchor_context()
     }

@@ -160,8 +160,6 @@ pub trait Emulator: Send {
     fn flush_sync(&mut self);
     fn resize(&mut self, cols: u16, rows: u16);
     fn scroll(&mut self, scroll: Scroll);
-    /// How far the viewport is scrolled back into history.
-    fn display_offset(&self) -> usize;
     /// Cursor position and screen, for anchoring rich cards.
     fn anchor_context(&self) -> AnchorContext;
     fn alt_screen(&self) -> bool;
