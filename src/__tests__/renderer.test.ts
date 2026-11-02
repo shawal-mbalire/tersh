@@ -77,7 +77,7 @@ describe("GridRenderer", () => {
   });
 
   it("puts each character in its own cell when the font has narrower letters", () => {
-    // Sono's `i` is a pixel narrower than its other letters.
+    // WebKitGTK reports Sono's `i` a pixel narrower than its other letters.
     const { r, draws } = renderer({ i: 8 });
     r.resize(40, 1);
     r.apply(frame([run(2, "third line here")]));

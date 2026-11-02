@@ -49,8 +49,10 @@ export class GridRenderer {
   /** What the cursor element shows, so unchanged frames don't touch the DOM. */
   private cursorKey = "";
   /** Per font: widths of the printable ASCII characters, or `null` when they
-   *  all equal the cell advance (a true monospace font). Sono, for one, has a
-   *  narrower `i`, and a run drawn in one call would then drift off the grid. */
+   *  all equal the cell advance. WebKitGTK rounds hinted glyph advances to
+   *  whole pixels, so even a monospace font like Sono reports some letters
+   *  (`i`, `c`, `t`, ...) a pixel narrower or wider than the rest, and a run
+   *  drawn in one call would then drift off the grid. */
   private asciiWidths = new Map<string, Float64Array | null>();
 
   constructor(
