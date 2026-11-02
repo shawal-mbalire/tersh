@@ -90,6 +90,19 @@ describe("GridRenderer", () => {
     expect(draws[2]).toEqual({ text: "i", x: 4 * 9 + 0.5 });
   });
 
+  it("counts characters outside the BMP as one cell each", () => {
+    // Two-unit characters: one cell each, drawn per cell; a wide one is drawn whole.
+    const { r, draws } = renderer({});
+    r.resize(40, 1);
+    r.apply(frame([run(0, "\u{1d400}\u{1d401}"), { c: 2, n: 2, t: "\u{1f600}", fg: 256, bg: 257, f: 0 }]));
+    r.draw();
+    expect(draws).toEqual([
+      { text: "\u{1d400}", x: 0 },
+      { text: "\u{1d401}", x: 9 },
+      { text: "\u{1f600}", x: 18 },
+    ]);
+  });
+
   it("falls back to per-cell drawing without letter spacing when the advance isn't a whole cell", () => {
     // A 9.4px advance snaps to a 9px cell; without letterSpacing the run would drift.
     const all: Record<string, number> = {};

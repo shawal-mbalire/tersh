@@ -124,7 +124,7 @@ fn session_start(
             let rich_enabled = state.config.lock().unwrap().rich.enabled;
             let spawned = tersh_adapters::spawn_local(options, rich_enabled, state.sink.clone())?;
             if let Some(input) = launch.input {
-                let _ = spawned.write(input.as_bytes());
+                let _ = spawned.write(input);
             }
             *session = Some(spawned);
         },
@@ -141,7 +141,7 @@ fn with_session<T>(state: &State<'_, AppState>, f: impl FnOnce(&Session) -> T) -
 
 #[tauri::command]
 fn session_write(state: State<'_, AppState>, data: String) -> CmdResult<()> {
-    with_session(&state, |s| s.write(data.as_bytes()))?
+    with_session(&state, |s| s.write(data))?
 }
 
 #[tauri::command]

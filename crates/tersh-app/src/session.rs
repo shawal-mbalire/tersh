@@ -138,12 +138,12 @@ struct Host {
 
 impl Host {
     /// Queue bytes for the program. False once the program's input has closed.
-    fn send(&self, bytes: &[u8]) -> bool {
+    fn send(&self, bytes: Vec<u8>) -> bool {
         if bytes.is_empty() {
             return true;
         }
         add(&self.counters.input_pending, bytes.len() as u64);
-        self.input.send(bytes.to_vec()).is_ok()
+        self.input.send(bytes).is_ok()
     }
 }
 
@@ -167,7 +167,7 @@ fn write_loop(mut output: Box<dyn Write + Send>, queue: mpsc::Receiver<Vec<u8>>,
 
 impl TermHost for Host {
     fn reply(&self, text: &str) {
-        self.send(text.as_bytes());
+        self.send(text.as_bytes().to_vec());
     }
 
     fn event(&self, event: TermEvent) {
@@ -376,12 +376,12 @@ impl Session {
 
     /// Send input (keystrokes, pastes, mouse reports) to the program, and
     /// bring a viewport scrolled into history back to the bottom. Never waits
-    /// for output parsing.
-    pub fn write(&self, bytes: &[u8]) -> Result<()> {
+    /// for output parsing. Takes the bytes, so a caller's buffer is queued without a copy.
+    pub fn write(&self, bytes: impl Into<Vec<u8>>) -> Result<()> {
         if self.shared.maybe_scrolled.swap(false, Ordering::SeqCst) {
             self.shared.queue_scroll(Scroll::Bottom);
         }
-        if !self.shared.host.send(bytes) {
+        if !self.shared.host.send(bytes.into()) {
             return Err(AppError::new(Code::InputClosed, "the program's input is closed"));
         }
         Ok(())

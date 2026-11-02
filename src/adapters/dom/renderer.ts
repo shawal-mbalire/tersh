@@ -23,6 +23,22 @@ function isAscii(s: string): boolean {
   return true;
 }
 
+/** How many characters (code points) `s` holds, without splitting it into an array. */
+function charCount(s: string): number {
+  let n = s.length;
+  for (let i = 0; i < s.length - 1; i++) {
+    const code = s.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = s.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        n--;
+        i++;
+      }
+    }
+  }
+  return n;
+}
+
 export class GridRenderer {
   cols = 0;
   rows = 0;
@@ -244,17 +260,20 @@ export class GridRenderer {
     return font;
   }
 
-  private colors(run: Run): { fg: string; bg: string | null } {
-    let fg = run.fg;
-    let bg = run.bg;
-    if (run.f & CellFlag.INVERSE) [fg, bg] = [bg, fg];
-    const bold = (run.f & CellFlag.BOLD) !== 0;
-    let fgCss = this.palette.resolve(fg, bold);
+  /** The text colour of `run`. */
+  private foreground(run: Run): string {
+    const fg = run.f & CellFlag.INVERSE ? run.bg : run.fg;
     if (run.f & CellFlag.DIM) {
-      if (fg < 8) fgCss = this.palette.resolve(259 + fg);
-      else if (fg === FG) fgCss = this.palette.resolve(268);
+      if (fg < 8) return this.palette.resolve(259 + fg);
+      if (fg === FG) return this.palette.resolve(268);
     }
-    return { fg: fgCss, bg: bg === BG ? null : this.fadeBackground(this.palette.resolve(bg)) };
+    return this.palette.resolve(fg, (run.f & CellFlag.BOLD) !== 0);
+  }
+
+  /** The painted background of `run`, or `null` for the default (transparent) one. */
+  private background(run: Run): string | null {
+    const bg = run.f & CellFlag.INVERSE ? run.fg : run.bg;
+    return bg === BG ? null : this.fadeBackground(this.palette.resolve(bg));
   }
 
   /** Apply `window.opacity` to a painted background colour so apps like opencode
@@ -283,7 +302,7 @@ export class GridRenderer {
     }
 
     for (const run of this.lines[y] ?? []) {
-      const { fg, bg } = this.colors(run);
+      const bg = this.background(run);
       const left = run.c * cw;
       const width = run.n * cw;
       if (bg) {
@@ -295,6 +314,7 @@ export class GridRenderer {
       }
       if (run.f & CellFlag.HIDDEN) continue;
 
+      const fg = this.foreground(run);
       const font = this.fontFor(run.f);
       if (font !== this.currentFont) {
         ctx.font = font;
@@ -308,9 +328,12 @@ export class GridRenderer {
         // Every character is one cell wide: draw the whole run at once.
         if (run.t.trim().length > 0) ctx.fillText(run.t, left, top + baseline);
       } else {
-        const chars = [...run.t];
-        if (chars.length === run.n) {
-          for (let i = 0; i < chars.length; i++) this.drawChar(chars[i], left + i * cw, top, widths);
+        if (charCount(run.t) === run.n) {
+          let x = left;
+          for (const ch of run.t) {
+            this.drawChar(ch, x, top, widths);
+            x += cw;
+          }
         } else {
           ctx.fillText(run.t, left, top + baseline);
         }
@@ -365,7 +388,7 @@ export class GridRenderer {
     const { cellWidth: cw, cellHeight: ch } = this.metrics;
     const { x, y, shape, blink } = frame.cursor;
     const run = this.cellAt(y, x);
-    const wide = run && run.c === x && run.n === 2 && [...run.t].length !== run.n;
+    const wide = run && run.c === x && run.n === 2 && charCount(run.t) !== run.n;
     const text = shape === "block" && run ? this.charAt(run, x) : "";
     const key = `${x},${y},${shape},${blink},${wide},${run?.f ?? 0},${text}`;
     if (!el.hidden && key === this.cursorKey) return;
@@ -386,7 +409,10 @@ export class GridRenderer {
   }
 
   private charAt(run: Run, x: number): string {
-    const chars = [...run.t];
-    return chars.length === run.n ? (chars[x - run.c] ?? "") : run.t;
+    if (run.t.length === run.n) return run.t[x - run.c] ?? "";
+    if (charCount(run.t) !== run.n) return run.t;
+    let i = run.c;
+    for (const ch of run.t) if (i++ === x) return ch;
+    return "";
   }
 }
