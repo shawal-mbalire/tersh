@@ -1,5 +1,5 @@
 import type { CardInstance, CardRenderer } from "@tersh/cards";
-import { type Anchor, cardBox, type Geometry, isExpired, type RichMessage } from "../../domain/cards";
+import { type Anchor, cardBox, type Geometry, isExpired, type RichMessage } from "../../../domain/cards";
 
 export type { Anchor, RichMessage };
 export type { CardContext, CardInstance, CardRenderer } from "@tersh/cards";
@@ -166,6 +166,7 @@ export class CardManager {
     style.transform = `translate(${box.left}px, ${box.top}px)`;
     style.width = box.width === null ? "" : `${box.width}px`;
     style.height = box.height === null ? "" : `${box.height}px`;
+    style.clipPath = box.clip ? `inset(${box.clip.top}px 0 ${box.clip.bottom}px 0)` : "";
     card.root.classList.toggle("fixed-height", box.height !== null);
     if (box.height === null && geo) {
       // Auto-height cards may grow to the bottom of the grid.

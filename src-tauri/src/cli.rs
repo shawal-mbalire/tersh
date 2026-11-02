@@ -1,5 +1,6 @@
 //! Command line: `tersh [OPTIONS]` opens a window; `tersh update` updates.
 
+use tersh_domain::error::{AppError, Code, Result};
 use std::path::PathBuf;
 
 pub const USAGE: &str = "\
@@ -56,7 +57,13 @@ pub enum Command {
     Help,
 }
 
-pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> {
+/// A command-line mistake.
+#[track_caller]
+fn bad(message: impl Into<String>) -> AppError {
+    AppError::new(Code::Arguments, message)
+}
+
+pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command> {
     let mut args = args.into_iter().peekable();
     if args.peek().map(String::as_str) == Some("update") {
         args.next();
@@ -65,7 +72,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> 
             match arg.as_str() {
                 "--check" | "-c" => check = true,
                 "-h" | "--help" => return Ok(Command::Help),
-                other => return Err(format!("unknown option for update: {other}")),
+                other => return Err(bad(format!("unknown option for update: {other}"))),
             }
         }
         return Ok(Command::Update { check });
@@ -73,7 +80,7 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> 
 
     let mut launch = Launch::default();
     while let Some(arg) = args.next() {
-        let mut value = |name: &str| args.next().ok_or_else(|| format!("{name} needs a value"));
+        let mut value = |name: &str| args.next().ok_or_else(|| bad(format!("{name} needs a value")));
         match arg.as_str() {
             "-h" | "--help" => return Ok(Command::Help),
             "-V" | "--version" => return Ok(Command::Version),
@@ -81,13 +88,13 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> 
             "--input" => launch.input = Some(value(&arg)?),
             "--size" => {
                 let text = value(&arg)?;
-                let (w, h) = text.split_once(['x', 'X']).ok_or("--size needs WIDTHxHEIGHT")?;
+                let (w, h) = text.split_once(['x', 'X']).ok_or_else(|| bad("--size needs WIDTHxHEIGHT"))?;
                 let parse = |v: &str| v.trim().parse::<f64>().ok().filter(|v| *v >= 100.0);
-                launch.size = Some((parse(w).ok_or("bad --size width")?, parse(h).ok_or("bad --size height")?));
+                launch.size = Some((parse(w).ok_or_else(|| bad("bad --size width"))?, parse(h).ok_or_else(|| bad("bad --size height"))?));
             },
             // Added by macOS when launched from Finder on old systems.
             s if s.starts_with("-psn_") => {},
-            other => return Err(format!("unknown argument: {other}")),
+            other => return Err(bad(format!("unknown argument: {other}"))),
         }
     }
     Ok(Command::Run(launch))
@@ -97,8 +104,9 @@ pub fn parse(args: impl IntoIterator<Item = String>) -> Result<Command, String> 
 mod tests {
     use super::*;
 
-    fn parse_str(args: &str) -> Result<Command, String> {
-        parse(args.split_whitespace().map(String::from))
+    /// The command, or the code of the error.
+    fn parse_str(args: &str) -> std::result::Result<Command, Code> {
+        parse(args.split_whitespace().map(String::from)).map_err(|e| e.code)
     }
 
     #[test]
@@ -107,14 +115,14 @@ mod tests {
         assert_eq!(parse_str("update"), Ok(Command::Update { check: false }));
         assert_eq!(parse_str("update --check"), Ok(Command::Update { check: true }));
         assert_eq!(parse_str("--version"), Ok(Command::Version));
-        assert!(parse_str("update --force").is_err());
-        assert!(parse_str("--bogus").is_err());
+        assert_eq!(parse_str("update --force"), Err(Code::Arguments));
+        assert_eq!(parse_str("--bogus"), Err(Code::Arguments));
     }
 
     #[test]
     fn launch_options_round_trip() {
         let launch = Launch { cwd: Some("/tmp/x".into()), input: Some("tmux attach\r".into()), size: Some((1000.0, 640.0)) };
-        assert_eq!(parse(launch.to_args()), Ok(Command::Run(launch)));
-        assert!(parse_str("--size 50x50").is_err());
+        assert_eq!(parse(launch.to_args()).map_err(|e| e.code), Ok(Command::Run(launch)));
+        assert_eq!(parse_str("--size 50x50"), Err(Code::Arguments));
     }
 }

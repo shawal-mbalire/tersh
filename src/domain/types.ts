@@ -48,6 +48,25 @@ export interface Metrics {
   baseline: number;
 }
 
+/** Profiling counters from the backend: totals since the session started (see `tersh_domain::Stats`). */
+export interface SessionStats {
+  uptime_ms: number;
+  output_bytes: number;
+  output_reads: number;
+  parse_us: number;
+  frames_built: number;
+  frames_sent: number;
+  frames_skipped: number;
+  rows_sent: number;
+  build_us: number;
+  build_max_us: number;
+  input_bytes: number;
+  input_writes: number;
+  input_pending: number;
+  history: number;
+  memory_bytes: number | null;
+}
+
 export interface SessionInfo {
   version: string;
   cols: number;
@@ -129,6 +148,8 @@ export const Mode = {
   ALT_SCREEN: 1 << 12,
   MOUSE_DRAG: 1 << 13,
   ALTERNATE_SCROLL: 1 << 15,
+  /** Kitty keyboard protocol, "disambiguate escape codes" flag (pushed by e.g. Neovim). */
+  DISAMBIGUATE_KEYS: 1 << 18,
   MOUSE_MODE: (1 << 3) | (1 << 6) | (1 << 13),
 } as const;
 

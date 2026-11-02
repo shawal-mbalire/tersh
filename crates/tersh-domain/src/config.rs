@@ -30,7 +30,7 @@ pub struct Config {
     /// The resolved theme (what the UI gets).
     #[serde(skip_deserializing)]
     pub theme: Theme,
-    /// The theme as written: a name or a table. [`Config::parse`] resolves it into `theme`.
+    /// The theme as written: a name or a table. [`Config::resolve`] resolves it into `theme`.
     #[serde(rename = "theme", skip_serializing, deserialize_with = "ThemeSpec::deserialize_name_or_table")]
     pub theme_spec: ThemeSpec,
     /// Key combo (`"ctrl+shift+t"`) to action name or `{ send = "text" }`.
@@ -176,22 +176,20 @@ impl Default for Update {
 }
 
 impl Config {
-    /// Parse config text. Unknown keys and theme problems become [`Config::warnings`];
-    /// only malformed TOML is an error. Theme names are resolved against `themes`.
-    pub fn parse(text: &str, themes: &dyn ThemeSource) -> Result<Self, String> {
-        let mut unknown = Vec::new();
-        let deserializer = toml::Deserializer::parse(text).map_err(|e| e.to_string())?;
-        let mut config: Self = serde_ignored::deserialize(deserializer, |path| unknown.push(path.to_string()))
-            .map_err(|e: toml::de::Error| e.to_string())?;
-        config.warnings.extend(unknown.into_iter().map(|key| format!("unknown config key `{key}`")));
-        config.theme = config.theme_spec.resolve(themes);
-        config.warnings.append(&mut config.theme.warnings);
-        Ok(config)
+    /// Finish a config decoded from a file: `unknown_keys` (keys the file has
+    /// that tersh doesn't) and theme problems become [`Config::warnings`], and
+    /// the theme is resolved against `themes`. Decoding the file format is the
+    /// storage adapter's job.
+    pub fn resolve(mut self, unknown_keys: Vec<String>, themes: &dyn ThemeSource) -> Self {
+        self.warnings.extend(unknown_keys.into_iter().map(|key| format!("unknown config key `{key}`")));
+        self.theme = self.theme_spec.resolve(themes);
+        self.warnings.append(&mut self.theme.warnings);
+        self
     }
 
     /// Defaults, with the theme resolved (so user theme files apply even without a config file).
     pub fn defaults(themes: &dyn ThemeSource) -> Self {
-        Self::parse("", themes).unwrap_or_default()
+        Self::default().resolve(Vec::new(), themes)
     }
 
     /// The configured shell, if any.
@@ -219,51 +217,20 @@ mod tests {
     use super::*;
     use crate::theme::BuiltinOnly;
 
-    fn parse(text: &str) -> Result<Config, String> {
-        Config::parse(text, &BuiltinOnly)
-    }
-
     #[test]
-    fn serializes_the_resolved_theme() {
-        let config = parse("theme = 'rosepine'").unwrap();
-        let json = serde_json::to_value(&config).unwrap();
-        assert_eq!(json["theme"]["name"], "rose-pine");
-        assert_eq!(json["theme"]["background"], "#191724");
-        assert!(json.get("theme_spec").is_none());
-        assert_eq!(Config::default().font.family, DEFAULT_FONT);
-    }
-
-    #[test]
-    fn partial_config_keeps_defaults() {
-        let config = parse("shell = 'fish'\n[font]\nsize = 16\n").unwrap();
-        assert_eq!(config.shell(), Some("fish"));
-        assert_eq!(config.font.size, 16.0);
-        assert_eq!(config.font.line_height, 1.2);
-        assert_eq!(config.theme.palette.len(), 16);
-        assert!(config.rich.enabled);
-    }
-
-    #[test]
-    fn template_is_valid_and_matches_defaults() {
-        let config = Config::parse(TEMPLATE, &BuiltinOnly).unwrap();
-        assert!(config.warnings.is_empty(), "{:?}", config.warnings);
+    fn defaults_resolve_the_default_theme() {
+        let config = Config::defaults(&BuiltinOnly);
+        assert_eq!(config.font.family, DEFAULT_FONT);
         assert_eq!(config.theme, Theme::default());
+        assert!(config.warnings.is_empty(), "{:?}", config.warnings);
     }
 
     #[test]
-    fn collects_warnings() {
-        let config = parse("scrolback = 5\ntheme = 'nope'\n[font]\nsize = 12\nfamly = 'x'\n").unwrap();
-        assert_eq!(config.font.size, 12.0);
-        assert_eq!(config.warnings.len(), 3, "{:?}", config.warnings);
-        assert!(config.warnings.iter().any(|w| w.contains("`scrolback`")), "{:?}", config.warnings);
-        assert!(parse("[font\n").is_err());
-    }
-
-    #[test]
-    fn keybindings() {
-        let config = parse("[keybindings]\n'ctrl+shift+k' = 'clear_cards'\n'alt+b' = { send = \"\\u001bb\" }\n").unwrap();
-        assert_eq!(config.keybindings["ctrl+shift+k"], Binding::Action("clear_cards".into()));
-        assert_eq!(config.keybindings["alt+b"], Binding::Send { send: "\u{1b}b".into() });
+    fn unknown_keys_and_theme_problems_become_warnings() {
+        let config = Config { theme_spec: ThemeSpec { name: Some("nope".into()), ..Default::default() }, ..Default::default() };
+        let config = config.resolve(vec!["font.famly".into()], &BuiltinOnly);
+        assert_eq!(config.warnings.len(), 2, "{:?}", config.warnings);
+        assert!(config.warnings[0].contains("`font.famly`"));
     }
 
     #[test]

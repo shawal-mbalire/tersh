@@ -26,11 +26,15 @@ use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::config::parse_hex;
+use crate::error::Result;
+#[cfg(test)]
+use crate::error::{AppError, Code};
 
-/// Where user theme files come from. Implemented by a storage adapter.
+/// Where user theme files come from. Implemented by a storage adapter, which
+/// also decodes the file format.
 pub trait ThemeSource {
-    /// The text of the user theme `name`, `None` if there is none, or a read error.
-    fn read(&self, name: &str) -> Option<Result<String, String>>;
+    /// The user theme `name`, `None` if there is none, or why it couldn't be read.
+    fn read(&self, name: &str) -> Option<Result<ThemeSpec>>;
     /// Names of every user theme.
     fn names(&self) -> Vec<String>;
 }
@@ -39,7 +43,7 @@ pub trait ThemeSource {
 pub struct BuiltinOnly;
 
 impl ThemeSource for BuiltinOnly {
-    fn read(&self, _: &str) -> Option<Result<String, String>> {
+    fn read(&self, _: &str) -> Option<Result<ThemeSpec>> {
         None
     }
     fn names(&self) -> Vec<String> {
@@ -47,9 +51,9 @@ impl ThemeSource for BuiltinOnly {
     }
 }
 
-/// In-memory theme files, keyed by name (handy for tests and embedding).
-impl ThemeSource for HashMap<String, String> {
-    fn read(&self, name: &str) -> Option<Result<String, String>> {
+/// In-memory themes, keyed by name (handy for tests and embedding).
+impl ThemeSource for HashMap<String, ThemeSpec> {
+    fn read(&self, name: &str) -> Option<Result<ThemeSpec>> {
         self.get(name).cloned().map(Ok)
     }
     fn names(&self) -> Vec<String> {
@@ -183,17 +187,10 @@ fn lookup(name: &str, source: &dyn ThemeSource, warnings: &mut Vec<String>, dept
 }
 
 fn read_theme_file(name: &str, source: &dyn ThemeSource, warnings: &mut Vec<String>) -> Option<ThemeSpec> {
-    let text = match source.read(name)? {
-        Ok(text) => text,
-        Err(e) => {
-            warnings.push(format!("theme \"{name}\": {e}"));
-            return None;
-        },
-    };
-    match toml::from_str::<ThemeSpec>(&text) {
+    match source.read(name)? {
         Ok(spec) => Some(spec),
         Err(e) => {
-            warnings.push(format!("theme \"{name}\": {}", e.message()));
+            warnings.push(format!("theme \"{name}\": {e}"));
             None
         },
     }
@@ -397,8 +394,20 @@ mod tests {
         toml::from_str::<Wrapper>(toml_text).unwrap().theme
     }
 
-    fn files(entries: &[(&str, &str)]) -> HashMap<String, String> {
-        entries.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect()
+    /// Theme files as a storage adapter would decode them; a bad one reads as an error.
+    struct Files(HashMap<String, std::result::Result<ThemeSpec, String>>);
+
+    impl ThemeSource for Files {
+        fn read(&self, name: &str) -> Option<Result<ThemeSpec>> {
+            self.0.get(name).map(|r| r.clone().map_err(|e| AppError::new(Code::ThemeSyntax, e)))
+        }
+        fn names(&self) -> Vec<String> {
+            self.0.keys().cloned().collect()
+        }
+    }
+
+    fn files(entries: &[(&str, &str)]) -> Files {
+        Files(entries.iter().map(|(k, v)| (k.to_string(), toml::from_str(v).map_err(|e| e.to_string()))).collect())
     }
 
     #[test]

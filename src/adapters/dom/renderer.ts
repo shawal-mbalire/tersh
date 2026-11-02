@@ -1,7 +1,7 @@
-import type { Config, Frame, Metrics, Run } from "../domain/types";
-import { CellFlag, Mode } from "../domain/types";
-import { withSymbols } from "../domain/fonts";
-import { BG, FG, Palette, parseHex } from "../domain/palette";
+import type { Config, Frame, Metrics, Run } from "../../domain/types";
+import { CellFlag, Mode } from "../../domain/types";
+import { withSymbols } from "../../domain/fonts";
+import { BG, FG, Palette, parseHex } from "../../domain/palette";
 import { drawShape } from "./shapes";
 
 const UNDERLINES =
@@ -23,6 +23,22 @@ function isAscii(s: string): boolean {
   return true;
 }
 
+/** How many characters (code points) `s` holds, without splitting it into an array. */
+function charCount(s: string): number {
+  let n = s.length;
+  for (let i = 0; i < s.length - 1; i++) {
+    const code = s.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = s.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        n--;
+        i++;
+      }
+    }
+  }
+  return n;
+}
+
 export class GridRenderer {
   cols = 0;
   rows = 0;
@@ -40,6 +56,20 @@ export class GridRenderer {
   private bgAlpha = 1;
   /** Faded background colours by source colour; cleared when opacity changes. */
   private faded = new Map<string, string>();
+  /** The font's own advance per character. `cellWidth` is snapped to device
+   *  pixels, so the two differ slightly (e.g. 8.4px glyphs in 8.5px cells). */
+  private advance = 8;
+  /** Whether the canvas supports `letterSpacing`, which makes a whole run of
+   *  text advance exactly one cell per character. */
+  private readonly spacingSupported: boolean;
+  /** What the cursor element shows, so unchanged frames don't touch the DOM. */
+  private cursorKey = "";
+  /** Per font: widths of the printable ASCII characters, or `null` when they
+   *  all equal the cell advance. WebKitGTK rounds hinted glyph advances to
+   *  whole pixels, so even a monospace font like Sono reports some letters
+   *  (`i`, `c`, `t`, ...) a pixel narrower or wider than the rest, and a run
+   *  drawn in one call would then drift off the grid. */
+  private asciiWidths = new Map<string, Float64Array | null>();
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -51,6 +81,7 @@ export class GridRenderer {
     const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) throw new Error("2D canvas unavailable");
     this.ctx = ctx;
+    this.spacingSupported = "letterSpacing" in ctx;
     this.bgAlpha = bgAlpha;
     this.measure();
   }
@@ -77,9 +108,12 @@ export class GridRenderer {
   measure(): Metrics {
     this.dpr = window.devicePixelRatio || 1;
     this.fonts.clear();
+    this.asciiWidths.clear();
     const ctx = this.ctx;
+    if (this.spacingSupported) ctx.letterSpacing = "0px";
     ctx.font = this.fontFor(0);
     const sample = ctx.measureText("M".repeat(64));
+    this.advance = sample.width / 64;
     const snap = (v: number) => Math.max(1, Math.round(v * this.dpr) / this.dpr);
     const cellWidth = snap(sample.width / 64);
     const cellHeight = snap(this.font.size * this.font.line_height);
@@ -88,7 +122,47 @@ export class GridRenderer {
     const baseline = Math.round((cellHeight - (ascent + descent)) / 2 + ascent);
     this.metrics = { cellWidth, cellHeight, baseline };
     this.currentFont = "";
+    this.cursorKey = "";
+    this.applySpacing();
     return this.metrics;
+  }
+
+  /** Whether a run of plain text drawn with one `fillText` lands on the cell grid. */
+  private get runsFitCells(): boolean {
+    return this.spacingSupported || Math.abs(this.metrics.cellWidth - this.advance) < 0.01;
+  }
+
+  /** ASCII widths of `font` (the current canvas font); see `asciiWidths`. */
+  private widthsFor(font: string): Float64Array | null {
+    let widths = this.asciiWidths.get(font);
+    if (widths !== undefined) return widths;
+    const ctx = this.ctx;
+    if (this.spacingSupported) ctx.letterSpacing = "0px";
+    const measured = new Float64Array(0x7f - 0x20);
+    let uniform = true;
+    for (let code = 0x20; code < 0x7f; code++) {
+      const w = ctx.measureText(String.fromCharCode(code)).width;
+      measured[code - 0x20] = w;
+      if (Math.abs(w - this.advance) > 0.01) uniform = false;
+    }
+    this.applySpacing();
+    widths = uniform ? null : measured;
+    this.asciiWidths.set(font, widths);
+    return widths;
+  }
+
+  /** Draw one character in the cell at `x`, centring glyphs narrower than the cell. */
+  private drawChar(ch: string, x: number, top: number, widths: Float64Array | null) {
+    const { cellWidth: cw, cellHeight, baseline } = this.metrics;
+    if (ch === " " || drawShape(this.ctx, ch, x, top, cw, cellHeight)) return;
+    const code = ch.length === 1 ? ch.charCodeAt(0) : 0;
+    const w = widths && code >= 0x20 && code < 0x7f ? widths[code - 0x20] : cw;
+    this.ctx.fillText(ch, w < cw ? x + (cw - w) / 2 : x, top + baseline);
+  }
+
+  /** Stretch or squeeze text so each character advances exactly one cell. */
+  private applySpacing() {
+    if (this.spacingSupported) this.ctx.letterSpacing = `${this.metrics.cellWidth - this.advance}px`;
   }
 
   /** Grid size that fits in the given CSS pixel area. */
@@ -111,7 +185,10 @@ export class GridRenderer {
     this.canvas.height = Math.round(height * this.dpr);
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     this.ctx.textBaseline = "alphabetic";
+    // Resizing the canvas resets its state, letter spacing included.
+    this.applySpacing();
     this.currentFont = "";
+    this.cursorKey = "";
     if (this.bgAlpha > 0) {
       this.ctx.fillStyle = this.fadeBackground(this.palette.resolve(BG));
       this.ctx.fillRect(0, 0, width, height);
@@ -183,17 +260,20 @@ export class GridRenderer {
     return font;
   }
 
-  private colors(run: Run): { fg: string; bg: string | null } {
-    let fg = run.fg;
-    let bg = run.bg;
-    if (run.f & CellFlag.INVERSE) [fg, bg] = [bg, fg];
-    const bold = (run.f & CellFlag.BOLD) !== 0;
-    let fgCss = this.palette.resolve(fg, bold);
+  /** The text colour of `run`. */
+  private foreground(run: Run): string {
+    const fg = run.f & CellFlag.INVERSE ? run.bg : run.fg;
     if (run.f & CellFlag.DIM) {
-      if (fg < 8) fgCss = this.palette.resolve(259 + fg);
-      else if (fg === FG) fgCss = this.palette.resolve(268);
+      if (fg < 8) return this.palette.resolve(259 + fg);
+      if (fg === FG) return this.palette.resolve(268);
     }
-    return { fg: fgCss, bg: bg === BG ? null : this.fadeBackground(this.palette.resolve(bg)) };
+    return this.palette.resolve(fg, (run.f & CellFlag.BOLD) !== 0);
+  }
+
+  /** The painted background of `run`, or `null` for the default (transparent) one. */
+  private background(run: Run): string | null {
+    const bg = run.f & CellFlag.INVERSE ? run.fg : run.bg;
+    return bg === BG ? null : this.fadeBackground(this.palette.resolve(bg));
   }
 
   /** Apply `window.opacity` to a painted background colour so apps like opencode
@@ -222,7 +302,7 @@ export class GridRenderer {
     }
 
     for (const run of this.lines[y] ?? []) {
-      const { fg, bg } = this.colors(run);
+      const bg = this.background(run);
       const left = run.c * cw;
       const width = run.n * cw;
       if (bg) {
@@ -234,22 +314,25 @@ export class GridRenderer {
       }
       if (run.f & CellFlag.HIDDEN) continue;
 
+      const fg = this.foreground(run);
       const font = this.fontFor(run.f);
       if (font !== this.currentFont) {
         ctx.font = font;
         this.currentFont = font;
       }
       ctx.fillStyle = fg;
+      const widths = this.widthsFor(font);
       if (run.n === 1) {
-        if (run.t !== " " && !drawShape(ctx, run.t, left, top, cw, ch)) ctx.fillText(run.t, left, top + baseline);
-      } else if (run.t.length === run.n && isAscii(run.t)) {
+        this.drawChar(run.t, left, top, widths);
+      } else if (widths === null && run.t.length === run.n && isAscii(run.t) && this.runsFitCells) {
+        // Every character is one cell wide: draw the whole run at once.
         if (run.t.trim().length > 0) ctx.fillText(run.t, left, top + baseline);
       } else {
-        const chars = [...run.t];
-        if (chars.length === run.n) {
-          for (let i = 0; i < chars.length; i++) {
-            const x = left + i * cw;
-            if (chars[i] !== " " && !drawShape(ctx, chars[i], x, top, cw, ch)) ctx.fillText(chars[i], x, top + baseline);
+        if (charCount(run.t) === run.n) {
+          let x = left;
+          for (const ch of run.t) {
+            this.drawChar(ch, x, top, widths);
+            x += cw;
           }
         } else {
           ctx.fillText(run.t, left, top + baseline);
@@ -305,7 +388,11 @@ export class GridRenderer {
     const { cellWidth: cw, cellHeight: ch } = this.metrics;
     const { x, y, shape, blink } = frame.cursor;
     const run = this.cellAt(y, x);
-    const wide = run && run.c === x && run.n === 2 && [...run.t].length !== run.n;
+    const wide = run && run.c === x && run.n === 2 && charCount(run.t) !== run.n;
+    const text = shape === "block" && run ? this.charAt(run, x) : "";
+    const key = `${x},${y},${shape},${blink},${wide},${run?.f ?? 0},${text}`;
+    if (!el.hidden && key === this.cursorKey) return;
+    this.cursorKey = key;
     el.hidden = false;
     el.className = `shape-${shape}${blink ? " blink" : ""}`;
     el.style.transform = `translate(${x * cw}px, ${y * ch}px)`;
@@ -313,7 +400,6 @@ export class GridRenderer {
     el.style.height = `${ch}px`;
     // A block cursor shows the character underneath in the background colour.
     if (shape === "block") {
-      const text = run ? this.charAt(run, x) : "";
       el.textContent = text.trim() ? text : "";
       el.style.font = this.fontFor(run?.f ?? 0);
       el.style.lineHeight = `${ch}px`;
@@ -323,7 +409,10 @@ export class GridRenderer {
   }
 
   private charAt(run: Run, x: number): string {
-    const chars = [...run.t];
-    return chars.length === run.n ? (chars[x - run.c] ?? "") : run.t;
+    if (run.t.length === run.n) return run.t[x - run.c] ?? "";
+    if (charCount(run.t) !== run.n) return run.t;
+    let i = run.c;
+    for (const ch of run.t) if (i++ === x) return ch;
+    return "";
   }
 }

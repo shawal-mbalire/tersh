@@ -30,6 +30,18 @@ impl ProcessInspector for SystemProcesses {
             out.lines().find_map(|l| l.strip_prefix('n')).map(PathBuf::from)
         }
     }
+
+    fn memory(&self, pid: u32) -> Option<u64> {
+        let kib: u64 = if cfg!(target_os = "linux") {
+            let status = std::fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
+            status.lines().find_map(|l| l.strip_prefix("VmRSS:"))?.trim().trim_end_matches("kB").trim().parse().ok()?
+        } else if cfg!(unix) {
+            command_output(Command::new("ps").args(["-o", "rss=", "-p", &pid.to_string()]))?.trim().parse().ok()?
+        } else {
+            return None;
+        };
+        Some(kib * 1024)
+    }
 }
 
 fn command_output(command: &mut Command) -> Option<String> {
@@ -47,5 +59,8 @@ mod tests {
         let name = SystemProcesses.name(pid).expect("own name");
         assert!(!name.is_empty());
         assert_eq!(SystemProcesses.cwd(pid), std::env::current_dir().ok());
+        if cfg!(unix) {
+            assert!(SystemProcesses.memory(pid).is_some_and(|bytes| bytes > 0));
+        }
     }
 }

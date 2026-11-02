@@ -9,7 +9,8 @@ send them:
   passthrough: `ESC P tmux; <sequence with every ESC doubled> ESC \`.
 - **Socket:** connect to the Unix socket in `$TERSH_SOCKET` and write one JSON
   object per line. Each line gets a one-line reply: `{"ok":true}` or
-  `{"ok":false,"error":"..."}`. Use the socket for large payloads, or when you
+  `{"ok":false,"error":"...","code":"RCH-001"}` (codes are listed in
+  [errors.md](errors.md)). Use the socket for large payloads, or when you
   must know a card is placed before you print more. The socket only
   accepts the user's own connections (mode `0600`).
 
@@ -33,17 +34,17 @@ Setting `rich.osc = false` makes tersh accept cards only from the socket. Then
 }
 ```
 
-| Field    | Meaning                                                                                                                    |
-| -------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `op`     | `show` (default), `update`, `move`, `close`, `clear`, `info` (socket only: returns the grid size and cursor)               |
-| `id`     | Card id. `show` with an existing id replaces that card. Omit it for a generated id.                                        |
-| `kind`   | Renderer: `text`, `json`, `markdown`, `image`, `video`, `svg`, `html`, `plotly`, `notebook`, `output`, or a plugin's kind. |
-| `data`   | Content (see below).                                                                                                       |
-| `title`  | Title shown in the card's header.                                                                                          |
-| `chrome` | `false` hides the header and frame.                                                                                        |
-| `hidden` | `true` keeps the card but doesn't draw it (e.g. its line scrolled out of an editor window).                                |
-| `anchor` | Where the card goes (see below). `update` and `move` without `anchor` keep the current one.                                |
-| `screen` | For `clear`: only clear `"primary"` or `"alt"` cards.                                                                      |
+| Field    | Meaning                                                                                                                                                             |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `op`     | `show` (default), `update`, `move`, `close`, `clear`, `info` (socket only: returns the grid size and cursor), `stats` (socket only: returns the profiling counters) |
+| `id`     | Card id. `show` with an existing id replaces that card. Omit it for a generated id.                                                                                 |
+| `kind`   | Renderer: `text`, `json`, `markdown`, `image`, `video`, `svg`, `html`, `plotly`, `notebook`, `output`, or a plugin's kind.                                          |
+| `data`   | Content (see below).                                                                                                                                                |
+| `title`  | Title shown in the card's header.                                                                                                                                   |
+| `chrome` | `false` hides the header and frame.                                                                                                                                 |
+| `hidden` | `true` keeps the card but doesn't draw it (e.g. its line scrolled out of an editor window).                                                                         |
+| `anchor` | Where the card goes (see below). `update` and `move` without `anchor` keep the current one.                                                                         |
+| `screen` | For `clear`: only clear `"primary"` or `"alt"` cards.                                                                                                               |
 
 `update` replaces `data` (and any other fields given). It creates the card if
 it doesn't exist and `kind` is given. `move` changes only `anchor` and `hidden`.
@@ -56,7 +57,18 @@ it doesn't exist and `kind` is given. `move` changes only `anchor` and `hidden`.
 | `cell`             | `row`, `col` (screen cells, 0-based), `rows`, `cols`                                   | A fixed screen position. On the alternate screen (Neovim, tmux) this is what editor integrations use.             |
 | `float`            | `top`, `left`, `width`, `height`: numbers are cells, strings are CSS lengths (`"10%"`) | Over the whole terminal, not tied to text.                                                                        |
 
-If `rows` is omitted, the card sizes itself to its content. Cards anchored on
+A `cursor` card follows the output by counting the lines that scroll off the
+top of the screen. Once the scrollback is full, tersh counts by recognising
+the newest history lines again after each read of output. A single read that
+scrolls more than 256 lines, or output that repeats in blocks of fewer than 16
+identical lines, can be undercounted, and the card then sits a little low.
+
+If `rows` is omitted, the card sizes itself to its content.
+
+Editors that scroll a card partly out of a window send `total` (the card's
+full height in rows) and `skip` (rows hidden above `row`) with a `cell`
+anchor. The card keeps its full height and is clipped to the `rows` visible
+from `row`, so its content doesn't reflow while scrolling. Cards anchored on
 the alternate screen are removed when the program leaves it.
 
 ### Data by kind

@@ -76,14 +76,14 @@
 #
 # Actions: copy, paste, zoom_in, zoom_out, zoom_reset, scroll_page_up,
 # scroll_page_down, scroll_top, scroll_bottom, clear_cards, reload_config,
-# open_config, plus any a plugin registers.
+# open_config, restart, toggle_profiler, plus any a plugin registers.
 #
 # Defaults (cmd instead of ctrl+shift on macOS):
 #   ctrl+shift+c copy           ctrl+shift+v paste
 #   ctrl+= / ctrl+- / ctrl+0    zoom in / out / reset
 #   shift+pageup / pagedown     scroll history
 #   ctrl+shift+k clear_cards    ctrl+shift+r reload_config
-#   ctrl+,       open_config
+#   ctrl+,       open_config    ctrl+shift+p toggle_profiler
 #
 # [keybindings]
 # "ctrl+shift+k" = "none"

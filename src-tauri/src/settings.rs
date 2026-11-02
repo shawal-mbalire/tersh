@@ -13,6 +13,8 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tersh_app::{ChangeDetector, Settings};
 
+use tersh_domain::{AppError, Code};
+
 use crate::{AppState, CmdResult};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(500);
@@ -31,11 +33,11 @@ pub fn reload_config(app: AppHandle) -> Settings {
 /// Open `config.toml` with the system's handler for it, creating it first if needed.
 #[tauri::command]
 pub fn open_config(state: State<'_, AppState>) -> CmdResult<()> {
-    state.store.ensure().map_err(|e| e.to_string())?;
-    open_path(&state.store.config_path())
+    state.store.ensure()?;
+    open_path(&state.store.config_path(), &state.env.vars)
 }
 
-fn open_path(path: &Path) -> CmdResult<()> {
+fn open_path(path: &Path, env: &[(String, String)]) -> CmdResult<()> {
     #[cfg(target_os = "macos")]
     let mut command = std::process::Command::new("open");
     #[cfg(target_os = "windows")]
@@ -48,7 +50,10 @@ fn open_path(path: &Path) -> CmdResult<()> {
     let mut command = std::process::Command::new("xdg-open");
 
     // The editor must not load the AppImage's libraries.
-    let mut child = tersh_adapters::unbundled(&mut command).arg(path).spawn().map_err(|e| format!("could not open {}: {e}", path.display()))?;
+    let mut child = tersh_adapters::unbundled(&mut command, env)
+        .arg(path)
+        .spawn()
+        .map_err(|e| AppError::new(Code::OpenFailed, format!("could not open {}", path.display())).because(e))?;
     // Reap it so it doesn't linger as a zombie.
     thread::spawn(move || child.wait());
     Ok(())

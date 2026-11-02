@@ -6,7 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import type { RichMessage } from "../../domain/cards";
-import type { Frame, SessionInfo, Settings, TermEvent } from "../../domain/types";
+import type { Frame, SessionInfo, SessionStats, Settings, TermEvent } from "../../domain/types";
 import type { Backend, PluginSource, SessionHandlers } from "../../ports/backend";
 
 export class TauriBackend implements Backend {
@@ -34,6 +34,14 @@ export class TauriBackend implements Backend {
 
   scrollToBottom() {
     return invoke<void>("session_scroll_to_bottom");
+  }
+
+  frameShown() {
+    return invoke<void>("session_frame_shown");
+  }
+
+  stats() {
+    return invoke<SessionStats>("session_stats");
   }
 
   getSettings() {
@@ -70,6 +78,10 @@ export class TauriBackend implements Backend {
 
   closeWindow() {
     return getCurrentWindow().close();
+  }
+
+  windowReady() {
+    return invoke<void>("window_ready");
   }
 
   async onAppUpdated(handler: (version: string) => void) {

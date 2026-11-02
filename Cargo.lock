@@ -3803,7 +3803,7 @@ dependencies = [
 
 [[package]]
 name = "tersh"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "env_logger",
  "log",
@@ -3820,23 +3820,24 @@ dependencies = [
 
 [[package]]
 name = "tersh-adapters"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "alacritty_terminal",
- "anyhow",
  "dirs",
+ "libc",
  "log",
  "portable-pty",
+ "serde_ignored",
  "serde_json",
  "tersh-app",
  "tersh-domain",
+ "toml 1.1.8+spec-1.1.0",
 ]
 
 [[package]]
 name = "tersh-app"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
- "anyhow",
  "log",
  "serde",
  "serde_json",
@@ -3845,19 +3846,17 @@ dependencies = [
 
 [[package]]
 name = "tersh-domain"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "base64 0.23.1",
- "log",
  "serde",
- "serde_ignored",
  "serde_json",
  "toml 1.1.8+spec-1.1.0",
 ]
 
 [[package]]
 name = "tersh-show"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "base64 0.23.1",
  "serde_json",

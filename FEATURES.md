@@ -33,50 +33,68 @@ three OSes; `ci desktop` = the Tauri build and clippy on Linux.
 
 ## Launch and window (WIN)
 
-| ID     | Feature                                                                          | How to check                                                                    | Linux | macOS | Windows | Automated by |
-| ------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | :---: | :---: | :-----: | ------------ |
-| WIN-01 | Launches from the OS launcher like a normal app                                  | Linux launcher / macOS Spotlight and Dock / Windows Start                       |  ✅   |  ⚠️   |   🧪    |              |
-| WIN-02 | Launches from a shell: `tersh`, `tersh --cwd DIR --input TEXT --size WxH`        | The window opens in DIR at the given size, and TEXT is typed into the shell     |  ✅   |  🧪   |   🧪    | cargo (cli)  |
-| WIN-03 | `tersh --version` / `--help` print to the console                                | Run from a terminal                                                             |  ✅   |  🧪   |   ⚠️    | cargo (cli)  |
-| WIN-04 | Translucent background (`window.opacity`)                                        | `opacity = 0.7`: the desktop shows through                                      |  ✅   |  ⚠️   |   🧪    |              |
-| WIN-05 | Backdrop blur (`window.blur`)                                                    | macOS vibrancy, Windows acrylic, Linux from the compositor (e.g. Hyprland blur) |  ✅   |  🧪   |   🧪    |              |
-| WIN-06 | Frameless window: drag by the top padding, resize from the edges                 | Drag and resize                                                                 |  ✅   |  🧪   |   🧪    |              |
-| WIN-07 | Starts in the home directory when launched from the GUI                          | Launch from the launcher; `pwd`                                                 |  ✅   |  🧪   |   🧪    |              |
-| WIN-08 | The shell gets a full user environment (PATH, profile) when started from the GUI | Launch from the launcher; `echo $PATH` includes Homebrew, `~/.local/bin`, etc.  |  ✅   |  ⚠️   |   🧪    |              |
-| WIN-09 | Window title follows the shell / program title                                   | `printf '\e]0;hello\a'`                                                         |  ✅   |  🧪   |   🧪    |              |
+| ID     | Feature                                                                          | How to check                                                                    | Linux | macOS | Windows | Automated by   |
+| ------ | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | :---: | :---: | :-----: | -------------- |
+| WIN-01 | Launches from the OS launcher like a normal app                                  | Linux launcher / macOS Spotlight and Dock / Windows Start                       |  ✅   |  ⚠️   |   🧪    |                |
+| WIN-02 | Launches from a shell: `tersh`, `tersh --cwd DIR --input TEXT --size WxH`        | The window opens in DIR at the given size, and TEXT is typed into the shell     |  ✅   |  🧪   |   🧪    | cargo (cli)    |
+| WIN-03 | `tersh --version` / `--help` print to the console                                | Run from a terminal                                                             |  ✅   |  🧪   |   ⚠️    | cargo (cli)    |
+| WIN-04 | Translucent background (`window.opacity`)                                        | `opacity = 0.7`: the desktop shows through                                      |  ✅   |  ⚠️   |   🧪    |                |
+| WIN-05 | Backdrop blur (`window.blur`)                                                    | macOS vibrancy, Windows acrylic, Linux from the compositor (e.g. Hyprland blur) |  ✅   |  🧪   |   🧪    |                |
+| WIN-06 | Frameless window: drag by the top padding, resize from the edges                 | Drag and resize                                                                 |  ✅   |  🧪   |   🧪    |                |
+| WIN-07 | Starts in the home directory when launched from the GUI                          | Launch from the launcher; `pwd`                                                 |  ✅   |  🧪   |   🧪    |                |
+| WIN-08 | The shell gets a full user environment (PATH, profile) when started from the GUI | Launch from the launcher; `echo $PATH` includes Homebrew, `~/.local/bin`, etc.  |  ✅   |  ⚠️   |   🧪    |                |
+| WIN-09 | Window title follows the shell / program title                                   | `printf '\e]0;hello\a'`                                                         |  ✅   |  🧪   |   🧪    |                |
+| WIN-10 | The window appears only once the first frame is painted (no empty frame)         | Launch: the first thing shown is the prompt                                     |  ✅   |  🧪   |   🧪    |                |
+| WIN-11 | `exit` closes the window at once; the shell is hung up and its socket removed    | `exit`; `ls $XDG_RUNTIME_DIR/tersh-*` shows no leftover socket                  |  ✅   |  🧪   |   🧪    | cargo (memory) |
 
 ## Terminal (TERM)
 
-| ID      | Feature                                                                                 | How to check                                                                      | Linux | macOS | Windows | Automated by               |
-| ------- | --------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | :---: | :---: | :-----: | -------------------------- |
-| TERM-01 | Runs `shell`/`args` from the config, or `$SHELL` / `%COMSPEC%`                          | Set `shell = "/bin/bash"`; open a new window                                      |  ✅   |  🧪   |   🧪    | cargo (tersh-adapters)     |
-| TERM-02 | Sets `TERM=xterm-256color`, `COLORTERM=truecolor`, `TERM_PROGRAM=tersh`, `TERSH_SOCKET` | `env \| grep -E 'TERM\|TERSH'`                                                    |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes) |
-| TERM-03 | Shells don't inherit tmux's or another tersh's variables (`TMUX`, `TERSH_SOCKET`)       | Start tersh from inside tmux; `echo $TMUX` is empty                               |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes) |
-| TERM-04 | Shells don't inherit the AppImage's environment (`LD_LIBRARY_PATH`, `PYTHONHOME`, …)    | `env \| grep -i tersh/app` is empty; `grep x /dev/null` prints no library warning |  ✅   |   —   |    —    | cargo (tersh-domain env)   |
-| TERM-05 | 16, 256 and 24-bit colours; bold, dim, italic, underline styles, strikethrough, inverse | `msgcat --color=test`, or a 24-bit colour test script                             |  ✅   |  🧪   |   🧪    |                            |
-| TERM-06 | Alternate screen (vim, htop, less) with scrollback preserved                            | Open and quit `vim`; earlier output is intact                                     |  ✅   |  🧪   |   🧪    | cargo (tersh-adapters)     |
-| TERM-07 | Scrollback (`scrollback` lines); mouse wheel and Shift+PageUp/PageDown                  | `seq 5000`, then scroll up                                                        |  ✅   |  🧪   |   🧪    |                            |
-| TERM-08 | Mouse reporting for programs (tmux, vim `mouse=a`, htop)                                | Click and scroll in htop and in tmux panes                                        |  ✅   |  🧪   |   🧪    |                            |
-| TERM-09 | Text selection and copy; middle-click paste                                             | Select with the mouse, copy, paste elsewhere                                      |  ✅   |  🧪   |   🧪    |                            |
-| TERM-10 | Bracketed paste                                                                         | Paste multiple lines into bash/zsh: they aren't executed                          |  ✅   |  🧪   |   🧪    | vitest (input)             |
-| TERM-11 | Focus in/out events                                                                     | vim `autoread`, tmux `focus-events`                                               |  ✅   |  🧪   |   🧪    |                            |
-| TERM-12 | IME input (CJK, accents) with the candidate window at the cursor                        | Type with an input method                                                         |  🧪   |  🧪   |   🧪    |                            |
-| TERM-13 | OSC 52 clipboard (e.g. from tmux or Neovim over ssh)                                    | `printf '\e]52;c;%s\a' "$(printf hi \| base64)"`, then paste                      |  ✅   |  🧪   |   🧪    |                            |
-| TERM-14 | Bell flashes the window                                                                 | `printf '\a'`                                                                     |  ✅   |  🧪   |   🧪    |                            |
-| TERM-15 | Resize reflows and resizes the PTY (`stty size` follows)                                | Resize the window; `stty size`                                                    |  ✅   |  🧪   |   🧪    |                            |
-| TERM-16 | Keystroke latency: echo is never delayed; heavy output is coalesced (~240 Hz)           | Type while `yes` runs in another pane                                             |  ✅   |  🧪   |   🧪    |                            |
+| ID      | Feature                                                                                                     | How to check                                                                      | Linux | macOS | Windows | Automated by               |
+| ------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | :---: | :---: | :-----: | -------------------------- |
+| TERM-01 | Runs `shell`/`args` from the config, or `$SHELL` / `%COMSPEC%`                                              | Set `shell = "/bin/bash"`; open a new window                                      |  ✅   |  🧪   |   🧪    | cargo (tersh-adapters)     |
+| TERM-02 | Sets `TERM=xterm-256color`, `COLORTERM=truecolor`, `TERM_PROGRAM=tersh`, `TERSH_SOCKET`                     | `env \| grep -E 'TERM\|TERSH'`                                                    |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes) |
+| TERM-03 | Shells don't inherit tmux's or another tersh's variables (`TMUX`, `TERSH_SOCKET`)                           | Start tersh from inside tmux; `echo $TMUX` is empty                               |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes) |
+| TERM-04 | Shells don't inherit the AppImage's environment (`LD_LIBRARY_PATH`, `PYTHONHOME`, …)                        | `env \| grep -i tersh/app` is empty; `grep x /dev/null` prints no library warning |  ✅   |   —   |    —    | cargo (tersh-domain env)   |
+| TERM-05 | 16, 256 and 24-bit colours; bold, dim, italic, underline styles, strikethrough, inverse                     | `msgcat --color=test`, or a 24-bit colour test script                             |  ✅   |  🧪   |   🧪    |                            |
+| TERM-06 | Alternate screen (vim, htop, less) with scrollback preserved                                                | Open and quit `vim`; earlier output is intact                                     |  ✅   |  🧪   |   🧪    | cargo (tersh-adapters)     |
+| TERM-07 | Scrollback (`scrollback` lines); mouse wheel and Shift+PageUp/PageDown                                      | `seq 5000`, then scroll up                                                        |  ✅   |  🧪   |   🧪    |                            |
+| TERM-08 | Mouse reporting for programs (tmux, vim `mouse=a`, htop)                                                    | Click and scroll in htop and in tmux panes                                        |  ✅   |  🧪   |   🧪    |                            |
+| TERM-09 | Text selection and copy; middle-click paste                                                                 | Select with the mouse, copy, paste elsewhere                                      |  ✅   |  🧪   |   🧪    |                            |
+| TERM-10 | Bracketed paste                                                                                             | Paste multiple lines into bash/zsh: they aren't executed                          |  ✅   |  🧪   |   🧪    | vitest (input)             |
+| TERM-11 | Focus in/out events                                                                                         | vim `autoread`, tmux `focus-events`                                               |  ✅   |  🧪   |   🧪    |                            |
+| TERM-12 | IME input (CJK, accents) with the candidate window at the cursor                                            | Type with an input method                                                         |  🧪   |  🧪   |   🧪    |                            |
+| TERM-13 | OSC 52 clipboard (e.g. from tmux or Neovim over ssh)                                                        | `printf '\e]52;c;%s\a' "$(printf hi \| base64)"`, then paste                      |  ✅   |  🧪   |   🧪    |                            |
+| TERM-14 | Bell flashes the window                                                                                     | `printf '\a'`                                                                     |  ✅   |  🧪   |   🧪    |                            |
+| TERM-15 | Resize reflows and resizes the PTY (`stty size` follows)                                                    | Resize the window; `stty size`                                                    |  ✅   |  🧪   |   🧪    |                            |
+| TERM-16 | Keystroke latency: echo is never delayed; heavy output is coalesced to the paint rate                       | Type while `yes` runs in another pane                                             |  ✅   |  🧪   |   🧪    |                            |
+| TERM-17 | Input is written in order on its own thread: a huge paste never freezes the window                          | Paste 10 MB into `sleep 60`; the window stays responsive                          |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes) |
+| TERM-18 | Kitty keyboard protocol for programs that ask: Shift/Ctrl/Alt+Enter, Esc, Tab reach Neovim as distinct keys | In Neovim, `:map <S-CR>` something, press Shift-Enter                             |  ✅   |  🧪   |   🧪    | vitest (input)             |
 
 ## Rendering (REN)
 
-| ID     | Feature                                                                             | How to check                                                         | Linux | macOS | Windows | Automated by   |
-| ------ | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------- | :---: | :---: | :-----: | -------------- |
-| REN-01 | Bundled Sono font (default) and any `font.family`                                   | Change `font.family`; it applies live                                |  ✅   |  🧪   |   🧪    | vitest (fonts) |
-| REN-02 | Nerd Font icons with any font (bundled symbols)                                     | `echo '        '`                                                    |  ✅   |  🧪   |   🧪    | vitest (fonts) |
-| REN-03 | Powerline separators and block elements fill the cell at any `line_height`          | tmux catppuccin status bar: rounded caps are solid; `printf '█▀▄▌▐'` |  ✅   |  🧪   |   🧪    |                |
-| REN-04 | Zoom in, out and reset                                                              | Ctrl/Cmd + `=` / `-` / `0`                                           |  ✅   |  🧪   |   🧪    |                |
-| REN-05 | Cursor shapes (block, beam, underline), blink, and changes from programs (DECSCUSR) | `printf '\e[6 q'` gives a beam                                       |  ✅   |  🧪   |   🧪    |                |
-| REN-06 | Wide characters and emoji take two cells                                            | `echo '漢字 👍'`                                                     |  ✅   |  🧪   |   🧪    |                |
-| REN-07 | Only changed rows repaint; a full-screen `cat` of a large file stays smooth         | `cat` a 50 MB log                                                    |  ✅   |  🧪   |   🧪    |                |
+| ID     | Feature                                                                               | How to check                                                           | Linux | macOS | Windows | Automated by      |
+| ------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | :---: | :---: | :-----: | ----------------- |
+| REN-01 | Bundled Sono font (default) and any `font.family`                                     | Change `font.family`; it applies live                                  |  ✅   |  🧪   |   🧪    | vitest (fonts)    |
+| REN-02 | Nerd Font icons with any font (bundled symbols)                                       | `echo '        '`                                                      |  ✅   |  🧪   |   🧪    | vitest (fonts)    |
+| REN-03 | Powerline separators and block elements fill the cell at any `line_height`            | tmux catppuccin status bar: rounded caps are solid; `printf '█▀▄▌▐'`   |  ✅   |  🧪   |   🧪    |                   |
+| REN-04 | Zoom in, out and reset                                                                | Ctrl/Cmd + `=` / `-` / `0`                                             |  ✅   |  🧪   |   🧪    |                   |
+| REN-05 | Cursor shapes (block, beam, underline), blink, and changes from programs (DECSCUSR)   | `printf '\e[6 q'` gives a beam                                         |  ✅   |  🧪   |   🧪    |                   |
+| REN-06 | Wide characters and emoji take two cells                                              | `echo '漢字 👍'`                                                       |  ✅   |  🧪   |   🧪    |                   |
+| REN-07 | Only changed rows repaint; a full-screen `cat` of a large file stays smooth           | `cat` a 50 MB log                                                      |  ✅   |  🧪   |   🧪    |                   |
+| REN-08 | Text stays on the cell grid even when the font's letters differ in width (Sono's `i`) | In Claude Code, type a long line: the cursor sits right after the text |  ✅   |  🧪   |   🧪    | vitest (renderer) |
+
+## Performance and memory (PERF)
+
+| ID      | Feature                                                                                                        | How to check                                                               | Linux | macOS | Windows | Automated by                    |
+| ------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | :---: | :---: | :-----: | ------------------------------- |
+| PERF-01 | Profiler overlay (`toggle_profiler`, Ctrl+Shift+P): paint time, key-to-screen latency, frames, memory          | Press it, type, run `seq 100000`                                           |  ✅   |  🧪   |   🧪    | vitest (profile)                |
+| PERF-02 | Session counters over the socket: `{"op":"stats"}`; `tersh.profile()` for plugins                              | `printf '{"op":"stats"}\n' \| socat - UNIX:$TERSH_SOCKET`                  |  ✅   |  🧪   |    —    | cargo (session_with_fakes)      |
+| PERF-03 | Frames that change nothing are not sent to the page                                                            | Profiler: "unchanged" counts up while a program redraws the same screen    |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes)      |
+| PERF-04 | No leaks: heap is flat with full scrollback; closed sessions free everything, even if the shell ignores SIGHUP | `cargo test -p tersh-adapters --test memory`                               |  ✅   |  🧪   |   🧪    | cargo (memory), vitest (memory) |
+| PERF-05 | Replay a recording through the emulator to time parsing and frame building                                     | `cargo run --release -p tersh-adapters --example replay -- out.raw 120 40` |  ✅   |  🧪   |   🧪    |                                 |
+| PERF-06 | Output parses near the emulator's own speed even with full scrollback                                          | Fill the scrollback, then `cat` a 50 MB log; or run the `replay` example   |  ✅   |  🧪   |   🧪    | cargo (tersh-adapters scroll)   |
+| PERF-07 | One frame in flight: the page is never sent frames faster than it paints them                                  | Profiler while `seq 1500000` runs: frames/s stays near the display rate    |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes)      |
+| PERF-08 | Typing and scrolling never wait for output parsing                                                             | Type while `seq 4000000` runs: keys echo without stutter                   |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes)      |
 
 ## Configuration and themes (CONF)
 
@@ -127,16 +145,17 @@ three OSes; `ci desktop` = the Tauri build and clippy on Linux.
 
 ## Neovim plugin (NVIM)
 
-| ID      | Feature                                                                                        | How to check                                    | Linux | macOS | Windows | Automated by |
-| ------- | ---------------------------------------------------------------------------------------------- | ----------------------------------------------- | :---: | :---: | :-----: | ------------ |
-| NVIM-01 | Installs with lazy.nvim from the repo root (`main = "tersh"`, `lazy = false`)                  | `:Lazy`; `:checkhealth tersh`                   |  ✅   |  🧪   |   🧪    | nvim         |
-| NVIM-02 | `.ipynb` files open with a live rendered preview                                               | `nvim notebook.ipynb`                           |  ✅   |  🧪   |   🧪    | nvim         |
-| NVIM-03 | `:TershPreview` for markdown, HTML, SVG, Plotly JSON; the last good render stays while editing | Edit a markdown file with the preview open      |  ✅   |  🧪   |   🧪    | nvim         |
-| NVIM-04 | `:TershShow` (images, video, any kind) pinned below a line                                     | `:TershShow img.png`; scroll, edit, fold, split |  ✅   |  🧪   |   🧪    | nvim         |
-| NVIM-05 | Cards follow lines through scrolling, edits, folds, splits, tabs, and tmux panes               | As above, inside tmux                           |  ✅   |  🧪   |    —    | nvim         |
-| NVIM-06 | Cards hide while Neovim is suspended (Ctrl-Z)                                                  | Ctrl-Z, `fg`                                    |  ✅   |  🧪   |    —    | nvim         |
-| NVIM-07 | Lua API: `attach`, `attach_window`, `update`, `close`, `send`, `available`                     | docs/neovim.md examples                         |  ✅   |  🧪   |   🧪    | nvim         |
-| NVIM-08 | `:checkhealth tersh` reports the connection and the tmux settings                              | Run it inside and outside tersh                 |  ✅   |  🧪   |   🧪    |              |
+| ID      | Feature                                                                                                                                                                                | How to check                                    | Linux | macOS | Windows | Automated by |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | :---: | :---: | :-----: | ------------ |
+| NVIM-01 | Installs with lazy.nvim from the repo root (`main = "tersh"`, `lazy = false`)                                                                                                          | `:Lazy`; `:checkhealth tersh`                   |  ✅   |  🧪   |   🧪    | nvim         |
+| NVIM-02 | Notebooks open as Jupyter-style cells (In/Out prompts, outputs, rendered markdown) with Jupyter command-mode keys; `.md` beside its source; images, video, SVG, HTML rendered in place | `nvim notebook.ipynb`, `nvim README.md`         |  ✅   |  🧪   |   🧪    | nvim         |
+| NVIM-03 | `:TershPreview` for markdown, HTML, SVG, Plotly JSON; the last good render stays while editing                                                                                         | Edit a markdown file with the preview open      |  ✅   |  🧪   |   🧪    | nvim         |
+| NVIM-04 | `:TershShow` (images, video, any kind) pinned below a line                                                                                                                             | `:TershShow img.png`; scroll, edit, fold, split |  ✅   |  🧪   |   🧪    | nvim         |
+| NVIM-05 | Cards follow lines through scrolling, edits, folds, splits, tabs, and tmux panes                                                                                                       | As above, inside tmux                           |  ✅   |  🧪   |    —    | nvim         |
+| NVIM-06 | Cards hide while Neovim is suspended (Ctrl-Z)                                                                                                                                          | Ctrl-Z, `fg`                                    |  ✅   |  🧪   |    —    | nvim         |
+| NVIM-07 | Lua API: `attach`, `attach_window`, `update`, `close`, `send`, `available`                                                                                                             | docs/neovim.md examples                         |  ✅   |  🧪   |   🧪    | nvim         |
+| NVIM-08 | `:checkhealth tersh` reports the connection and the tmux settings                                                                                                                      | Run it inside and outside tersh                 |  ✅   |  🧪   |   🧪    |              |
+| NVIM-09 | Notebook cells run on a Jupyter kernel (kernelspec, the project's `.venv`, or `uv`): streamed outputs, `In [*]`, interrupt and restart                                                 | `nvim notebook.ipynb`, Esc, Shift-Enter         |  ✅   |  🧪   |   🧪    | nvim         |
 
 ## Plugins and building on tersh (EXT)
 

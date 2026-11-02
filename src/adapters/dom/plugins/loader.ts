@@ -1,7 +1,7 @@
 // Loads user plugins (found by the backend, e.g. in ~/.config/tersh/plugins)
 // and reloads them in place when their files change.
 
-import type { Backend, PluginSource } from "../../ports/backend";
+import type { Backend, PluginSource } from "../../../ports/backend";
 import type { Disposable, TershAPI } from "./api";
 
 /**

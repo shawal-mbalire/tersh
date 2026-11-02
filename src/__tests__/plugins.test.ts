@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PluginSource } from "../ports/backend";
-import type { Disposable, TershAPI } from "../ui/plugins/api";
-import { PluginHost, type PluginModule } from "../ui/plugins/loader";
+import type { Disposable, TershAPI } from "../adapters/dom/plugins/api";
+import { PluginHost, type PluginModule } from "../adapters/dom/plugins/loader";
 
 /** Just enough API to see what plugins register and whether it gets undone. */
 function fakeApi() {

@@ -18,19 +18,21 @@ use tersh_app::update::{self, UpdateStatus};
 use tersh_domain::update::{restart_decision, Restart};
 
 use crate::cli::Launch;
+use tersh_domain::{AppError, Code};
+
 use crate::{AppState, CmdResult};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const POLL_INTERVAL: Duration = Duration::from_secs(2);
 
 /// `tersh update [--check]`. Returns the process exit code.
-pub fn cli(check: bool) -> i32 {
+pub fn cli(check: bool, env: crate::environment::Environment) -> i32 {
     let releases = GithubReleases::default();
     let result = if check {
         update::check(VERSION, &releases)
     } else {
         println!("Checking for updates…");
-        update::update(VERSION, &releases, &InstallScript::default())
+        update::update(VERSION, &releases, &InstallScript::new(env.vars))
     };
     match result {
         Ok(UpdateStatus::UpToDate { current }) => println!("tersh {current} is up to date."),
@@ -41,7 +43,7 @@ pub fn cli(check: bool) -> i32 {
             println!("Updated tersh {previous} → {installed}. Open windows restart into it once their shell is idle.")
         },
         Err(e) => {
-            eprintln!("tersh update: {e:#}");
+            eprintln!("tersh update: {e}");
             return 1;
         },
     }
@@ -66,10 +68,16 @@ fn current_decision(state: &AppState) -> Restart {
     }
 }
 
+fn binary(state: &AppState) -> Option<AppBinary> {
+    AppBinary::locate(state.env.vars.clone(), state.env.current_exe.clone())
+}
+
 /// Start the binary on disk (possibly a newer version) in this window's place, then exit.
 fn relaunch(app: &AppHandle, input: Option<String>) -> CmdResult<()> {
-    let binary = AppBinary::current().ok_or("cannot find the tersh executable")?;
     let state = app.state::<AppState>();
+    let Some(binary) = binary(&state) else {
+        return Err(AppError::new(Code::BinaryMissing, "cannot find the tersh executable"));
+    };
     let cwd = state.session.lock().unwrap().as_ref().and_then(|s| s.cwd(&SystemProcesses));
     let size = app.get_webview_window("main").and_then(|w| {
         let scale = w.scale_factor().ok()?;
@@ -77,7 +85,7 @@ fn relaunch(app: &AppHandle, input: Option<String>) -> CmdResult<()> {
         Some((size.width, size.height))
     });
     let launch = Launch { cwd, input, size };
-    binary.launch(&launch.to_args()).map_err(|e| format!("could not start {}: {e}", binary.path().display()))?;
+    binary.launch(&launch.to_args())?;
     app.exit(0);
     Ok(())
 }
@@ -88,7 +96,7 @@ pub fn watch(app: AppHandle) {
     if cfg!(debug_assertions) {
         return;
     }
-    let Some(binary) = AppBinary::current() else { return };
+    let Some(binary) = binary(&app.state::<AppState>()) else { return };
     let spawned = thread::Builder::new().name("tersh-update-watch".into()).spawn(move || {
         let mut last = binary.fingerprint();
         let mut pending: Option<String> = None;

@@ -78,6 +78,8 @@ function controlChar(key: string): string | null {
   return null;
 }
 
+const KITTY_KEYS: Record<string, number> = { Escape: 27, Enter: 13, Tab: 9, Backspace: 127 };
+
 /**
  * Encode a key press as bytes for the PTY, following xterm conventions.
  *
@@ -99,6 +101,16 @@ export function encodeKey(e: KeyLike, mode: number): string | null {
 
   const fkey = SS3_FKEYS[e.key];
   if (fkey) return mods > 1 ? `${CSI}1;${mods}${fkey}` : SS3 + fkey;
+
+  // Kitty keyboard protocol: once a program pushes "disambiguate", keys that
+  // legacy encodings can't tell apart (Esc, and Enter/Tab/Backspace with
+  // modifiers) are sent as CSI <code> ; <mods> u.
+  if (mode & Mode.DISAMBIGUATE_KEYS) {
+    const code = KITTY_KEYS[e.key];
+    if (code !== undefined && (mods > 1 || e.key === "Escape")) {
+      return mods > 1 ? `${CSI}${code};${mods}u` : `${CSI}${code}u`;
+    }
+  }
 
   const alt = e.altKey ? ESC : "";
   switch (e.key) {

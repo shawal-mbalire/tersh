@@ -81,9 +81,36 @@ npm install
 npm run tauri dev        # or: npm run tauri build
 ```
 
-Linux needs the WebKitGTK development packages: `webkit2gtk4.1-devel` and
-`libsoup3-devel` on Fedora, or `libwebkit2gtk-4.1-dev` on Debian/Ubuntu.
-Install `tersh-show` with `cargo install --path crates/tersh-show`.
+Linux needs the WebKitGTK development packages. `scripts/setup-linux.sh`
+installs them (dnf, apt or pacman); with `--toolbox` it sets up a Fedora
+toolbox instead, for immutable systems or when you'd rather not install them on
+the host, and prints how to build inside it. Install `tersh-show` with
+`cargo install --path crates/tersh-show`.
+
+### Profiling and memory
+
+Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> (`toggle_profiler`) for an
+overlay with paint time, key-to-screen latency, frames sent and skipped,
+output throughput, parse and frame-build time, and the app's resident memory.
+The same session counters are available over the socket
+(`{"op":"stats"}`) and to plugins (`tersh.profile()`).
+
+To profile the emulator alone, record a program's output and replay it:
+
+```sh
+script -q -f out.raw -c claude
+cargo run --release -p tersh-adapters --example replay -- out.raw 120 40 --screen
+```
+
+It feeds the recording in 4 KiB reads with 10,000 lines of scrollback, as the
+app does, so the time it prints includes scroll tracking once the scrollback
+is full.
+
+`cargo test -p tersh-adapters --test memory` checks for leaks: the heap stays
+flat while scrollback churns, and returns to its baseline after many sessions
+are opened and closed, even when the program ignores the hang-up and keeps
+running. `src/__tests__/memory.test.ts` does the same for cards,
+listeners and the profiler in the page.
 
 ## Configuration
 
@@ -215,6 +242,7 @@ separately.
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>K</kbd>                | `clear_cards`                         |
 | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>                | `reload_config`                       |
 | <kbd>Ctrl</kbd>+<kbd>,</kbd>                                 | `open_config`                         |
+| <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>                | `toggle_profiler`                     |
 
 `scroll_top` and `scroll_bottom` are also available. Plugins can add actions
 (for example `myplugin.toggle`) that you bind the same way. Combos are written
@@ -241,8 +269,13 @@ or by sending JSON lines to `$TERSH_SOCKET`. See
 
 The plugin in `editors/nvim` attaches cards to buffer lines. They reserve
 blank virtual lines and follow the line through scrolling, edits, folds,
-splits and tmux panes. It also adds a live preview split for markdown, HTML,
-SVG, Plotly JSON and notebooks.
+splits and tmux panes. Notebooks open as Jupyter-style cells: code you
+edit with its outputs below, rendered markdown, `In`/`Out` prompts and
+Jupyter's command-mode keys (Esc, then `a`, `b`, `dd`, `m`, `y`, …).
+Shift-Enter runs cells on a Jupyter kernel (found in your project, or
+provided by `uv`), with outputs streaming in. Markdown
+files get a live preview beside the source, and images, video, SVG and HTML
+open rendered.
 
 ```lua
 -- lazy.nvim
@@ -257,8 +290,9 @@ SVG, Plotly JSON and notebooks.
 | `:TershPreview`        | toggle a live rendered preview of the buffer                    |
 | `:TershClose[!]`       | close cards on this line (`!`: all)                             |
 
-Opening an `.ipynb` file opens its preview automatically. Turn this off with
-`auto_preview = {}`. Other plugins can use the Lua API
+Opening a markdown, image, video, SVG or HTML file renders it straight
+away; `:TershPreview` toggles back to the source. Turn this off
+with `auto_preview = {}`. Other plugins can use the Lua API
 (`require("tersh").attach{...}`, `update`, `close`, `attach_window`), for
 example to show cell outputs under code. See [docs/neovim.md](docs/neovim.md).
 
@@ -297,3 +331,25 @@ npm test && npm run typecheck                          # frontend, including the
 cargo test                                             # domain, use cases (with fakes), adapters, tersh-show
 nvim --headless -u NONE -l editors/nvim/tests/run.lua  # Neovim plugin
 ```
+
+## Credits
+
+tersh is built on the work of these projects. Thank you to their authors and
+contributors.
+
+| Component                                                                                                                | Used for                                                      | License                             |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- | ----------------------------------- |
+| [alacritty_terminal](https://github.com/alacritty/alacritty) and [vte](https://github.com/alacritty/vte)                 | Terminal emulation: escape-sequence parsing, grid, scrollback | Apache-2.0 (vte: Apache-2.0 or MIT) |
+| [portable-pty](https://github.com/wezterm/wezterm) from WezTerm                                                          | Pseudo-terminals on Linux, macOS and Windows                  | MIT                                 |
+| [Tauri](https://github.com/tauri-apps/tauri)                                                                             | The desktop window, webview and IPC                           | Apache-2.0 or MIT                   |
+| [Sono](https://github.com/sursly/sono) by the Sono Project Authors, via [Fontsource](https://fontsource.org)             | The bundled default font                                      | SIL OFL 1.1                         |
+| [marked](https://github.com/markedjs/marked)                                                                             | Markdown cards                                                | MIT                                 |
+| [KaTeX](https://github.com/KaTeX/KaTeX) with [marked-katex-extension](https://github.com/UziTech/marked-katex-extension) | Maths in cards                                                | MIT                                 |
+| [highlight.js](https://github.com/highlightjs/highlight.js)                                                              | Syntax highlighting in code cards                             | BSD-3-Clause                        |
+| [Plotly.js](https://github.com/plotly/plotly.js)                                                                         | Plot cards                                                    | MIT                                 |
+| [DOMPurify](https://github.com/cure53/DOMPurify)                                                                         | Sanitising HTML in cards                                      | MPL-2.0 or Apache-2.0               |
+
+tersh also uses [serde](https://serde.rs), [toml](https://github.com/toml-rs/toml),
+[anyhow](https://github.com/dtolnay/anyhow) and other crates and npm packages
+listed in `Cargo.lock` and `package-lock.json`, each under its own license.
+tersh itself is [MIT licensed](LICENSE).
