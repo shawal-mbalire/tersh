@@ -48,6 +48,20 @@ describe("cardBox", () => {
     expect(cardBox({ screen: "primary", line: 100 }, { frame: frame({ alt: true }), metrics })).toBeNull();
   });
 
+  it("clips editor cards partly scrolled out instead of shrinking them", () => {
+    // 10 rows tall, 3 hidden above row 0, 4 visible: 3 more clipped below.
+    const anchor = { screen: "alt" as const, line: 0, rows: 4, total: 10, skip: 3 };
+    expect(cardBox(anchor, { frame: frame({ alt: true }), metrics })).toEqual({
+      left: 0,
+      top: -60,
+      width: 800,
+      height: 200,
+      clip: { top: 60, bottom: 60 },
+    });
+    // Without `total` the box is just the visible rows.
+    expect(cardBox({ screen: "alt", line: 0, rows: 4 }, { frame: frame({ alt: true }), metrics })?.clip).toBeUndefined();
+  });
+
   it("sizes float cards in cells or CSS units", () => {
     const box = cardBox({ mode: "float", left: 2, top: "50%", width: "200px", height: 5 }, { frame: frame(), metrics });
     expect(box).toEqual({ left: 20, top: 240, width: 200, height: 100 });

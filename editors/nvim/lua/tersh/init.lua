@@ -11,8 +11,19 @@ local api = vim.api
 local M = {}
 
 M.config = {
-  --- File extensions to preview automatically when opened.
-  auto_preview = { "ipynb" },
+  --- File extensions rendered automatically when opened.
+  auto_preview = {
+    "ipynb", "md", "markdown", "svg", "html", "htm",
+    "png", "jpg", "jpeg", "gif", "webp", "bmp", "avif",
+    "webm", "mp4", "m4v", "ogv", "mov",
+  },
+  --- Card kinds previewed in a split next to their source. Every other kind
+  --- is rendered over the window that shows the file; :TershPreview toggles
+  --- back to the source.
+  side_by_side = { "markdown" },
+  --- Open .ipynb files as cells: editable code with its outputs drawn below,
+  --- and rendered markdown. false opens them as JSON.
+  notebook = true,
   preview = {
     --- "vertical" or "horizontal" split, or "tab".
     split = "vertical",
@@ -25,6 +36,14 @@ M.config = {
   debounce = 150,
   --- Send messages even if tersh isn't detected (e.g. over ssh with OSC passthrough).
   force = false,
+  kernel = {
+    --- Python for the kernel bridge and kernel; default: the notebook's .venv,
+    --- $VIRTUAL_ENV, $CONDA_PREFIX or python3, else uv.
+    python = nil,
+    --- Kernel command line ({connection_file} is filled in) when the
+    --- notebook's kernelspec isn't installed.
+    argv = nil,
+  },
 }
 
 local ns = api.nvim_create_namespace("tersh")
@@ -37,6 +56,7 @@ local group = api.nvim_create_augroup("tersh", { clear = true })
 ---@field mark? integer line cards: extmark id
 ---@field rows? integer line cards: reserved rows
 ---@field win? integer  window cards: covered window
+---@field shows? integer window cards: only visible while `win` shows this buffer
 ---@field last? string  last placement sent, to skip redundant moves
 local cards = {}
 local counter = 0
@@ -116,7 +136,7 @@ local function place_line(card)
   end
   local area = text_area(win)
   local top = area.topline - 1
-  if line < top then
+  if line < top - 1 then
     return nil
   end
   local folded = api.nvim_win_call(win, function()
@@ -125,26 +145,40 @@ local function place_line(card)
   if folded then
     return nil
   end
-  -- Screen rows taken by everything above the anchor line, plus the line itself (wrapped).
-  local above = 0
-  if line > top then
-    above = api.nvim_win_text_height(win, { start_row = top, end_row = line - 1 }).all
-  end
-  local own = api.nvim_win_text_height(win, { start_row = line, end_row = line })
   local topfill = api.nvim_win_call(win, function()
     return vim.fn.winsaveview().topfill or 0
   end)
-  local row = above + topfill + (own.all - own.fill)
+  if line == top - 1 then
+    -- The line scrolled off the top but the bottom of its card is still the
+    -- filler above the first line: show that part.
+    local shown = math.min(topfill, card.rows, area.rows)
+    if shown <= 0 then
+      return nil
+    end
+    return { row = area.row, col = area.col, rows = shown, cols = area.cols, total = card.rows, skip = card.rows - shown }
+  end
+  -- Screen rows from the top of the window to the end of the anchor line
+  -- (wrapped). Neovim counts a line's virtual lines as filler above the
+  -- *next* line, so the span top..line includes every card above the anchor;
+  -- only `topfill` rows of the filler above the top line are on screen.
+  local span = api.nvim_win_text_height(win, { start_row = top, end_row = line })
+  local top_fill = api.nvim_win_text_height(win, { start_row = top, end_row = top }).fill
+  local row = topfill + span.all - top_fill
   local visible = math.min(card.rows, area.rows - row)
   if visible <= 0 then
     return nil
   end
-  return { row = area.row + row, col = area.col, rows = visible, cols = area.cols }
+  -- Cut off by the bottom of the window: clip rather than shrink.
+  local total = visible < card.rows and card.rows or nil
+  return { row = area.row + row, col = area.col, rows = visible, cols = area.cols, total = total, skip = total and 0 or nil }
 end
 
 local function place_window(card)
   local win = card.win
   if not api.nvim_win_is_valid(win) or api.nvim_win_get_tabpage(win) ~= api.nvim_get_current_tabpage() then
+    return nil
+  end
+  if card.shows and api.nvim_win_get_buf(win) ~= card.shows then
     return nil
   end
   local info = vim.fn.getwininfo(win)[1]
@@ -156,7 +190,35 @@ local function place_window(card)
   }
 end
 
-local function anchor_for(card)
+--- Screen boxes of floating windows and the completion menu. Cards are drawn
+--- above the text grid, so a card under one of these would cover it.
+local function occluders()
+  local boxes = {}
+  for _, win in ipairs(api.nvim_tabpage_list_wins(0)) do
+    local config = api.nvim_win_get_config(win)
+    if config.relative ~= "" and not config.hide then
+      local pos = api.nvim_win_get_position(win)
+      local border = (config.border and config.border ~= "none" and #config.border > 0) and 1 or 0
+      table.insert(boxes, {
+        row = pos[1] - border,
+        col = pos[2] - border,
+        rows = api.nvim_win_get_height(win) + 2 * border,
+        cols = api.nvim_win_get_width(win) + 2 * border,
+      })
+    end
+  end
+  local pum = vim.fn.pum_getpos()
+  if pum and pum.row then
+    table.insert(boxes, { row = pum.row, col = pum.col, rows = pum.height, cols = pum.width + (pum.scrollbar and 1 or 0) })
+  end
+  return boxes
+end
+
+local function overlaps(a, b)
+  return a.row < b.row + b.rows and b.row < a.row + a.rows and a.col < b.col + b.cols and b.col < a.col + a.cols
+end
+
+local function anchor_for(card, covers)
   if suspended or not offset.visible then
     return nil
   end
@@ -164,12 +226,29 @@ local function anchor_for(card)
   if not box then
     return nil
   end
-  return { mode = "cell", row = box.row + offset.row, col = box.col + offset.col, rows = box.rows, cols = box.cols }
+  for _, cover in ipairs(covers or occluders()) do
+    if overlaps(box, cover) then
+      return nil
+    end
+  end
+  return {
+    mode = "cell",
+    row = box.row + offset.row,
+    col = box.col + offset.col,
+    rows = box.rows,
+    cols = box.cols,
+    total = box.total,
+    skip = box.skip,
+  }
 end
 
-local function sync_card(card, force)
-  local anchor = anchor_for(card)
-  local key = anchor and string.format("%d,%d,%d,%d", anchor.row, anchor.col, anchor.rows, anchor.cols) or "hidden"
+local function anchor_key(anchor)
+  return string.format("%d,%d,%d,%d,%s,%s", anchor.row, anchor.col, anchor.rows, anchor.cols, anchor.total or "", anchor.skip or "")
+end
+
+local function sync_card(card, force, covers)
+  local anchor = anchor_for(card, covers)
+  local key = anchor and anchor_key(anchor) or "hidden"
   if key == card.last and not force then
     return
   end
@@ -184,8 +263,9 @@ end
 
 --- Reposition every card. Cheap when nothing moved.
 function M.sync(force)
+  local covers = next(cards) and occluders() or {}
   for _, card in pairs(cards) do
-    sync_card(card, force)
+    sync_card(card, force, covers)
   end
 end
 
@@ -219,7 +299,7 @@ end
 local function show(card, message)
   cards[card.id] = card
   local anchor = anchor_for(card)
-  card.last = anchor and string.format("%d,%d,%d,%d", anchor.row, anchor.col, anchor.rows, anchor.cols) or "hidden"
+  card.last = anchor and anchor_key(anchor) or "hidden"
   message.op = "show"
   message.id = card.id
   message.anchor = anchor or { mode = "cell", row = 0, col = 0, rows = 1, cols = 1 }
@@ -273,6 +353,7 @@ function M.attach(opts)
 end
 
 --- Show a card covering a window (e.g. a preview split). Returns its id.
+--- With `opts.shows = buf` the card hides while the window shows another buffer.
 function M.attach_window(win, opts)
   if not enabled() then
     return nil
@@ -281,8 +362,29 @@ function M.attach_window(win, opts)
   if cards[id] then
     M.close(id)
   end
-  local card = { id = id, kind = opts.kind, win = win == 0 and api.nvim_get_current_win() or win }
+  local card = { id = id, kind = opts.kind, win = win == 0 and api.nvim_get_current_win() or win, shows = opts.shows }
   return show(card, { kind = opts.kind, data = opts.data, title = opts.title, chrome = opts.chrome, mime = opts.mime })
+end
+
+--- Move a line card to another line (1-based) of its buffer, optionally
+--- changing the rows it reserves.
+function M.move_line(id, line, rows)
+  local card = cards[id]
+  if not card or not card.mark or not api.nvim_buf_is_valid(card.buf) then
+    return
+  end
+  card.rows = rows and math.max(1, rows) or card.rows
+  local virt_lines = {}
+  for i = 1, card.rows do
+    virt_lines[i] = { { "", "" } }
+  end
+  api.nvim_buf_set_extmark(card.buf, ns, line - 1, 0, {
+    id = card.mark,
+    virt_lines = virt_lines,
+    invalidate = true,
+    undo_restore = false,
+  })
+  schedule_sync()
 end
 
 --- True when cards can be shown: running inside tersh (or `force` is set).
@@ -433,14 +535,23 @@ local previews = {} -- source buf -> { card = id, win = preview window, timer }
 
 local function buffer_card(buf)
   local name = api.nvim_buf_get_name(buf)
+  local notebook = require("tersh.notebook")
+  if notebook.is_notebook(buf) then
+    return { kind = "notebook", data = notebook.to_json(buf) }
+  end
   local text = table.concat(api.nvim_buf_get_lines(buf, 0, -1, false), "\n")
   local kind = M.guess_kind(name, text)
   if kind == "text" then
     local by_ft = { markdown = "markdown", html = "html", svg = "svg", json = "json" }
     kind = by_ft[vim.bo[buf].filetype] or "text"
   end
-  if kind == "image" then
-    return nil -- binary buffers aren't previewed; use :TershShow on the file
+  if kind == "image" or kind == "video" then
+    -- Binary buffers are read from disk.
+    if name == "" or vim.fn.filereadable(name) == 0 then
+      return nil
+    end
+    local card = file_card(name)
+    return card and { kind = card.kind, data = card.data, binary = true }
   end
   if (kind == "notebook" or kind == "plotly" or kind == "json") and not pcall(vim.json.decode, text) then
     return { kind = kind, invalid = true }
@@ -459,9 +570,18 @@ local function close_preview(buf)
     preview.timer:close()
   end
   M.close(preview.card)
-  if api.nvim_win_is_valid(preview.win) then
+  if preview.split and api.nvim_win_is_valid(preview.win) then
     pcall(api.nvim_win_close, preview.win, true)
   end
+end
+
+--- A window in the current tab showing `buf`, preferring the current one.
+local function window_showing(buf)
+  local current = api.nvim_get_current_win()
+  if api.nvim_win_get_buf(current) == buf and not is_float(current) then
+    return current
+  end
+  return window_for(buf)
 end
 
 local function open_split()
@@ -494,7 +614,9 @@ local function open_split()
   return win, scratch
 end
 
---- Toggle a live preview of a buffer (markdown, HTML, SVG, notebooks, Plotly JSON).
+--- Toggle a live preview of a buffer (markdown, HTML, SVG, notebooks, Plotly JSON,
+--- images, video). Kinds in `config.side_by_side` open in a split next to the
+--- source; the rest are drawn over the buffer's own window.
 function M.preview(buf)
   buf = (buf == nil or buf == 0) and api.nvim_get_current_buf() or buf
   if previews[buf] then
@@ -509,14 +631,24 @@ function M.preview(buf)
     vim.notify("tersh: nothing to preview in this buffer", vim.log.levels.WARN)
     return
   end
-  local win, scratch = open_split()
+  local split = vim.tbl_contains(M.config.side_by_side, content.kind)
+  local win, scratch
+  if split then
+    win, scratch = open_split()
+  else
+    win = window_showing(buf)
+    if not win then
+      return
+    end
+  end
   local title = vim.fn.fnamemodify(api.nvim_buf_get_name(buf), ":t")
   local id = M.attach_window(win, {
     kind = content.kind,
     data = content.invalid and "" or content.data,
     title = title ~= "" and title or content.kind,
+    shows = not split and buf or nil,
   })
-  local preview = { card = id, win = win, kind = content.kind }
+  local preview = { card = id, win = win, kind = content.kind, split = split }
   previews[buf] = preview
 
   local function refresh()
@@ -527,7 +659,9 @@ function M.preview(buf)
     end
   end
   preview.timer = (vim.uv or vim.loop).new_timer()
-  api.nvim_create_autocmd({ "TextChanged", "TextChangedI", "BufWritePost" }, {
+  -- Binary files only change on disk; text is re-rendered as it is typed.
+  local events = content.binary and { "BufWritePost", "FileChangedShellPost" } or { "TextChanged", "TextChangedI", "BufWritePost" }
+  api.nvim_create_autocmd(events, {
     group = group,
     buffer = buf,
     callback = function()
@@ -544,6 +678,25 @@ function M.preview(buf)
     once = true,
     callback = function()
       close_preview(buf)
+    end,
+  })
+  if not scratch then
+    return
+  end
+  -- The split follows its file: switching the source window to another
+  -- buffer closes it (and a previewable file opens its own).
+  api.nvim_create_autocmd("BufWinLeave", {
+    group = group,
+    buffer = buf,
+    callback = function()
+      if previews[buf] ~= preview then
+        return true
+      end
+      vim.schedule(function()
+        if previews[buf] == preview and #vim.fn.win_findbuf(buf) == 0 then
+          close_preview(buf)
+        end
+      end)
     end,
   })
   api.nvim_create_autocmd("BufWipeout", {
@@ -565,9 +718,46 @@ end
 local function setup_autocmds()
   api.nvim_clear_autocmds({ group = group })
   api.nvim_create_autocmd(
-    { "WinScrolled", "WinResized", "WinNew", "WinClosed", "BufWinEnter", "BufWinLeave", "TabEnter", "TextChanged", "TextChangedI", "CursorMoved" },
+    {
+      "WinScrolled",
+      "WinResized",
+      "WinNew",
+      "WinClosed",
+      "BufWinEnter",
+      "BufWinLeave",
+      "TabEnter",
+      "TextChanged",
+      "TextChangedI",
+      "CursorMoved",
+      "CursorMovedI",
+      "CompleteChanged",
+      "CompleteDone",
+    },
     { group = group, callback = schedule_sync }
   )
+  api.nvim_create_autocmd({ "WinResized", "VimResized" }, {
+    group = group,
+    callback = function()
+      require("tersh.notebook").render_all()
+    end,
+  })
+  if M.config.notebook and (M.config.force or transport.available()) then
+    api.nvim_create_autocmd("BufReadCmd", {
+      group = group,
+      pattern = "*.ipynb",
+      callback = function(ev)
+        require("tersh.notebook").read(ev.buf, vim.fn.fnamemodify(ev.match, ":p"))
+        api.nvim_exec_autocmds("BufReadPost", { buffer = ev.buf, modeline = false })
+      end,
+    })
+    api.nvim_create_autocmd("BufWriteCmd", {
+      group = group,
+      pattern = "*.ipynb",
+      callback = function(ev)
+        require("tersh.notebook").write(ev.buf, vim.fn.fnamemodify(ev.match, ":p"))
+      end,
+    })
+  end
   api.nvim_create_autocmd({ "VimResized", "FocusGained", "FocusLost" }, {
     group = group,
     callback = function()
@@ -603,6 +793,25 @@ local function setup_autocmds()
     group = group,
     callback = function()
       M.close_all()
+      require("tersh.kernel").stop_all()
+    end,
+  })
+  -- A buffer rendered in place keeps its render when it moves to another window.
+  api.nvim_create_autocmd("BufWinEnter", {
+    group = group,
+    callback = function(ev)
+      local preview = previews[ev.buf]
+      local card = preview and not preview.split and cards[preview.card]
+      if not card then
+        return
+      end
+      local win = api.nvim_get_current_win()
+      local stale = not api.nvim_win_is_valid(card.win) or api.nvim_win_get_buf(card.win) ~= ev.buf
+      if stale and api.nvim_win_get_buf(win) == ev.buf and not is_float(win) then
+        card.win = win
+        preview.win = win
+        schedule_sync()
+      end
     end,
   })
   if #M.config.auto_preview > 0 then
@@ -613,7 +822,10 @@ local function setup_autocmds()
       group = group,
       pattern = patterns,
       callback = function(ev)
-        if not previews[ev.buf] and (M.config.force or transport.available()) then
+        -- A new, empty file has nothing to render yet.
+        local empty = api.nvim_buf_line_count(ev.buf) == 1 and api.nvim_buf_get_lines(ev.buf, 0, 1, false)[1] == ""
+        local notebook = require("tersh.notebook").is_notebook(ev.buf)
+        if not previews[ev.buf] and not empty and not notebook and (M.config.force or transport.available()) then
           vim.schedule(function()
             M.preview(ev.buf)
           end)

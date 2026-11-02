@@ -12,6 +12,13 @@ export interface Anchor {
   /** Size in cells; omitted means "to the right edge" / "fit content". */
   rows?: number;
   cols?: number;
+  /**
+   * A card partly scrolled out of an editor window: its full height in rows,
+   * of which `skip` rows are hidden above `row` and `rows` are visible from
+   * `row`. The rest is clipped, so the content doesn't reflow while scrolling.
+   */
+  total?: number;
+  skip?: number;
   /** Float anchors: numbers are cells, strings are CSS lengths ("10%", "120px"). */
   top?: number | string;
   left?: number | string;
@@ -41,7 +48,16 @@ export interface Geometry {
 }
 
 /** Pixel box of a card relative to the grid's top-left, or null when off-screen. */
-export function cardBox(anchor: Anchor, geo: Geometry): { left: number; top: number; width: number | null; height: number | null } | null {
+export interface CardBox {
+  left: number;
+  top: number;
+  width: number | null;
+  height: number | null;
+  /** Pixels clipped off the top and bottom of a partly visible card. */
+  clip?: { top: number; bottom: number };
+}
+
+export function cardBox(anchor: Anchor, geo: Geometry): CardBox | null {
   const { frame, metrics } = geo;
   const { cellWidth: cw, cellHeight: ch } = metrics;
   const gridWidth = frame.cols * cw;
@@ -68,12 +84,19 @@ export function cardBox(anchor: Anchor, geo: Geometry): { left: number; top: num
   if (rows !== undefined && row + rows <= 0) return null;
   if (row >= frame.rows) return null;
   const cols = anchor.cols ?? frame.cols - col;
-  return {
-    left: col * cw,
-    top: row * ch,
-    width: Math.min(cols, frame.cols - col) * cw,
-    height: rows === undefined ? null : rows * ch,
-  };
+  const width = Math.min(cols, frame.cols - col) * cw;
+  if (rows !== undefined && anchor.total !== undefined && anchor.total > rows) {
+    const skip = Math.min(Math.max(anchor.skip ?? 0, 0), anchor.total - rows);
+    const hiddenBelow = anchor.total - rows - skip;
+    return {
+      left: col * cw,
+      top: (row - skip) * ch,
+      width,
+      height: anchor.total * ch,
+      clip: { top: skip * ch, bottom: hiddenBelow * ch },
+    };
+  }
+  return { left: col * cw, top: row * ch, width, height: rows === undefined ? null : rows * ch };
 }
 
 /** Whether a primary-screen card has scrolled out of the history entirely. */

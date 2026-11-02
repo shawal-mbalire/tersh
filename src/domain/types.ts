@@ -148,6 +148,8 @@ export const Mode = {
   ALT_SCREEN: 1 << 12,
   MOUSE_DRAG: 1 << 13,
   ALTERNATE_SCROLL: 1 << 15,
+  /** Kitty keyboard protocol, "disambiguate escape codes" flag (pushed by e.g. Neovim). */
+  DISAMBIGUATE_KEYS: 1 << 18,
   MOUSE_MODE: (1 << 3) | (1 << 6) | (1 << 13),
 } as const;
 

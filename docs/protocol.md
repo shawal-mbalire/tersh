@@ -63,7 +63,12 @@ the newest history lines again after each read of output. A single read that
 scrolls more than 256 lines, or output that repeats in blocks of fewer than 16
 identical lines, can be undercounted, and the card then sits a little low.
 
-If `rows` is omitted, the card sizes itself to its content. Cards anchored on
+If `rows` is omitted, the card sizes itself to its content.
+
+Editors that scroll a card partly out of a window send `total` (the card's
+full height in rows) and `skip` (rows hidden above `row`) with a `cell`
+anchor. The card keeps its full height and is clipped to the `rows` visible
+from `row`, so its content doesn't reflow while scrolling. Cards anchored on
 the alternate screen are removed when the program leaves it.
 
 ### Data by kind

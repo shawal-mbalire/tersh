@@ -101,6 +101,9 @@ fn term_config(options: &EmulatorOptions) -> term::Config {
     term::Config {
         scrolling_history: options.scrollback,
         default_cursor_style: CursorStyle { shape, blinking: options.cursor.blink },
+        // Lets programs that ask for it (Neovim does at startup) tell keys like
+        // Shift+Enter and Ctrl+Enter apart from Enter. Others get legacy bytes.
+        kitty_keyboard: true,
         ..Default::default()
     }
 }

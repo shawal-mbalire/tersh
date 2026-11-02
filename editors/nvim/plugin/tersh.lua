@@ -37,3 +37,41 @@ end, { bang = true, desc = "Close tersh cards on this line (! for all)" })
 if (vim.env.TERSH_SOCKET or vim.env.TERM_PROGRAM == "tersh") and not vim.g.tersh_lazy then
   require("tersh")
 end
+
+-- Notebooks: run cells on a Jupyter kernel.
+local function notebook_buffer()
+  local buf = vim.api.nvim_get_current_buf()
+  if not require("tersh.notebook").is_notebook(buf) then
+    vim.notify("tersh: not a notebook buffer", vim.log.levels.WARN)
+    return nil
+  end
+  return buf
+end
+
+-- :TershRun  run the cell under the cursor;  :TershRun!  run every cell.
+command("TershRun", function(opts)
+  local buf = notebook_buffer()
+  if not buf then
+    return
+  end
+  local notebook = require("tersh.notebook")
+  if opts.bang then
+    notebook.run_all(buf)
+  else
+    notebook.run_current(buf)
+  end
+end, { bang = true, desc = "Run the notebook cell (! for all cells)" })
+
+command("TershInterrupt", function()
+  local buf = notebook_buffer()
+  if buf then
+    require("tersh.kernel").interrupt(buf)
+  end
+end, { desc = "Interrupt the notebook's kernel" })
+
+command("TershRestart", function()
+  local buf = notebook_buffer()
+  if buf then
+    require("tersh.kernel").restart(buf)
+  end
+end, { desc = "Restart the notebook's kernel" })

@@ -17,7 +17,7 @@
   --padding: 10px;
   --font-family: monospace;
   --font-size: 14px;
-  --card-bg: color-mix(in srgb, var(--bg-solid) 88%, white 4%);
+  --card-bg: color-mix(in srgb, var(--bg-solid) 96%, white 4%);
   --card-border: color-mix(in srgb, var(--fg) 16%, transparent);
   --code-bg: color-mix(in srgb, var(--fg) 7%, transparent);
   --error: var(--ansi-9, #f38ba8);
@@ -239,6 +239,15 @@ body.fatal {
 }
 .card:not(.fixed-height) .card-body {
   overflow: auto;
+}
+/* Frameless cards sit inside an editor's layout (e.g. notebook cells): they
+   still scroll with the wheel when content outgrows their rows, but without a
+   scrollbar drawn over the cell. */
+.card.bare .card-body {
+  scrollbar-width: none;
+}
+.card.bare .card-body::-webkit-scrollbar {
+  display: none;
 }
 
 /* ---- toasts -------------------------------------------------------------------- */

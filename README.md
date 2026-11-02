@@ -269,8 +269,13 @@ or by sending JSON lines to `$TERSH_SOCKET`. See
 
 The plugin in `editors/nvim` attaches cards to buffer lines. They reserve
 blank virtual lines and follow the line through scrolling, edits, folds,
-splits and tmux panes. It also adds a live preview split for markdown, HTML,
-SVG, Plotly JSON and notebooks.
+splits and tmux panes. Notebooks open as Jupyter-style cells: code you
+edit with its outputs below, rendered markdown, `In`/`Out` prompts and
+Jupyter's command-mode keys (Esc, then `a`, `b`, `dd`, `m`, `y`, …).
+Shift-Enter runs cells on a Jupyter kernel (found in your project, or
+provided by `uv`), with outputs streaming in. Markdown
+files get a live preview beside the source, and images, video, SVG and HTML
+open rendered.
 
 ```lua
 -- lazy.nvim
@@ -285,8 +290,9 @@ SVG, Plotly JSON and notebooks.
 | `:TershPreview`        | toggle a live rendered preview of the buffer                    |
 | `:TershClose[!]`       | close cards on this line (`!`: all)                             |
 
-Opening an `.ipynb` file opens its preview automatically. Turn this off with
-`auto_preview = {}`. Other plugins can use the Lua API
+Opening a markdown, image, video, SVG or HTML file renders it straight
+away; `:TershPreview` toggles back to the source. Turn this off
+with `auto_preview = {}`. Other plugins can use the Lua API
 (`require("tersh").attach{...}`, `update`, `close`, `attach_window`), for
 example to show cell outputs under code. See [docs/neovim.md](docs/neovim.md).
 

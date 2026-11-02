@@ -12,6 +12,17 @@ const key = (k: string, mods: Partial<KeyLike> = {}): KeyLike => ({
 });
 
 describe("encodeKey", () => {
+  it("tells modified Enter apart once a program enables the kitty protocol", () => {
+    const kitty = Mode.DISAMBIGUATE_KEYS;
+    expect(encodeKey(key("Enter", { shiftKey: true }), 0)).toBe("\r");
+    expect(encodeKey(key("Enter", { shiftKey: true }), kitty)).toBe("\x1b[13;2u");
+    expect(encodeKey(key("Enter", { ctrlKey: true }), kitty)).toBe("\x1b[13;5u");
+    expect(encodeKey(key("Enter", { altKey: true }), kitty)).toBe("\x1b[13;3u");
+    expect(encodeKey(key("Enter"), kitty)).toBe("\r");
+    expect(encodeKey(key("Escape"), kitty)).toBe("\x1b[27u");
+    expect(encodeKey(key("Tab", { shiftKey: true }), kitty)).toBe("\x1b[9;2u");
+  });
+
   it("leaves plain text to the input element", () => {
     expect(encodeKey(key("a"), 0)).toBeNull();
     expect(encodeKey(key("A", { shiftKey: true }), 0)).toBeNull();
