@@ -1,5 +1,6 @@
 // Key combos and the keybinding table: which key runs which action.
 
+import { effectiveKey, type KeyLike } from "./input";
 import type { Binding } from "./types";
 
 /** Normalise `"Shift+Ctrl+K"` → `"ctrl+shift+k"`. A literal plus key may be written `plus` or `+`. */
@@ -28,9 +29,9 @@ export function normalizeCombo(combo: string): string {
 }
 
 /** The combo string for a keyboard event, comparable with `normalizeCombo` output. */
-export function comboFromEvent(e: Pick<KeyboardEvent, "key" | "ctrlKey" | "altKey" | "shiftKey" | "metaKey">): string {
+export function comboFromEvent(e: Pick<KeyLike, "key" | "code" | "ctrlKey" | "altKey" | "shiftKey" | "metaKey">): string {
   const mods = [e.ctrlKey && "ctrl", e.altKey && "alt", e.shiftKey && "shift", e.metaKey && "meta"].filter(Boolean);
-  return [...mods, e.key.toLowerCase()].join("+");
+  return [...mods, effectiveKey(e).toLowerCase()].join("+");
 }
 
 /** Default bindings; the user's `[keybindings]` are merged over these. */

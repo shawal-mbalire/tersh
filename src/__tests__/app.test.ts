@@ -131,6 +131,7 @@ describe("TerminalApp", () => {
     expect(app.key(key("Enter"))).toBe(true);
     expect(app.key(key("a"))).toBe(false);
     app.typed("a");
+    expect(app.keyUp(key("a"))).toBe(false);
     expect(written).toEqual(["\x1bb", "\r", "a"]);
   });
 

@@ -168,11 +168,16 @@ mod unix {
         pub fn new(master: RawFd) -> io::Result<Self> {
             // SAFETY: `master` is the open master of a pty we own for the duration of this call.
             let fd = unsafe { BorrowedFd::borrow_raw(master) }.try_clone_to_owned()?;
-            // SAFETY: plain fcntl calls on a descriptor we own.
+            // SAFETY: plain fcntl and termios calls on a descriptor we own.
             unsafe {
                 let flags = libc::fcntl(fd.as_raw_fd(), libc::F_GETFL);
                 if flags < 0 || libc::fcntl(fd.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK) < 0 {
                     return Err(io::Error::last_os_error());
+                }
+                let mut termios: libc::termios = std::mem::zeroed();
+                if libc::tcgetattr(fd.as_raw_fd(), &mut termios) == 0 {
+                    termios.c_iflag |= libc::IUTF8;
+                    let _ = libc::tcsetattr(fd.as_raw_fd(), libc::TCSANOW, &termios);
                 }
             }
             let (stop, stop_writer) = io::pipe()?;
@@ -248,8 +253,20 @@ mod unix {
                 }
                 // SAFETY: `buf` is valid for `buf.len()` bytes.
                 let n = unsafe { libc::read(self.0.fd.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len()) };
-                if n >= 0 {
+                if n > 0 {
                     return Ok(n as usize);
+                }
+                if n == 0 {
+                    // On macOS a non-blocking PTY master can return 0 when no
+                    // data is currently readable; wait for readiness before
+                    // treating 0 as end-of-file.
+                    if !self.0.wait(false)? {
+                        return Ok(0);
+                    }
+                    let n = unsafe { libc::read(self.0.fd.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len()) };
+                    if n >= 0 {
+                        return Ok(n as usize);
+                    }
                 }
                 let err = io::Error::last_os_error();
                 match err.kind() {

@@ -19,6 +19,7 @@ use tauri::{AppHandle, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilde
 use tersh_adapters::{FsConfigStore, SystemFontDirs, SystemProcesses};
 use tersh_app::ports::{ConfigStore, Plugin, ProcessInspector, Watchable};
 use tersh_app::{Session, SessionOptions, Sink};
+use tersh_domain::input::{KeyInput, MouseReport};
 use tersh_domain::{AppError, Code, Config, Frame, Info, Stats, TermEvent};
 
 /// How long the window may stay hidden waiting for the page's first paint
@@ -145,6 +146,39 @@ fn session_write(state: State<'_, AppState>, data: String) -> CmdResult<()> {
 }
 
 #[tauri::command]
+fn session_key(state: State<'_, AppState>, event: KeyInput) -> CmdResult<bool> {
+    with_session(&state, |s| s.key(&event))?
+}
+
+#[tauri::command]
+fn session_paste(state: State<'_, AppState>, text: String) -> CmdResult<()> {
+    with_session(&state, |s| s.paste(&text))?
+}
+
+#[tauri::command]
+fn session_mouse(state: State<'_, AppState>, report: MouseReport) -> CmdResult<bool> {
+    with_session(&state, |s| s.mouse(&report))?
+}
+
+#[tauri::command]
+fn session_wheel(
+    state: State<'_, AppState>,
+    lines: i32,
+    col: u16,
+    row: u16,
+    shift: bool,
+    alt: bool,
+    ctrl: bool,
+) -> CmdResult<()> {
+    with_session(&state, |s| s.wheel(lines, col, row, shift, alt, ctrl))?
+}
+
+#[tauri::command]
+fn session_focus(state: State<'_, AppState>, focused: bool) -> CmdResult<()> {
+    with_session(&state, |s| s.focus(focused))?
+}
+
+#[tauri::command]
 fn session_resize(state: State<'_, AppState>, cols: u16, rows: u16, cell_width: u16, cell_height: u16) -> CmdResult<()> {
     with_session(&state, |s| s.resize(cols, rows, cell_width, cell_height))?
 }
@@ -256,6 +290,11 @@ pub fn run(launch: cli::Launch, env: environment::Environment) {
             settings::open_config,
             session_start,
             session_write,
+            session_key,
+            session_paste,
+            session_mouse,
+            session_wheel,
+            session_focus,
             session_resize,
             session_scroll,
             session_scroll_to_bottom,

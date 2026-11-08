@@ -2,6 +2,7 @@
 // tests): the terminal session, the user's settings, the clipboard and the window.
 
 import type { RichMessage } from "../domain/cards";
+import type { KeyLike, MouseReport } from "../domain/input";
 import type { Frame, SessionInfo, SessionStats, Settings, TermEvent } from "../domain/types";
 
 export interface SessionHandlers {
@@ -28,6 +29,16 @@ export interface Backend {
   /** Attach to the session (starting it on first call); output arrives through `handlers`. */
   startSession(cols: number, rows: number, cellWidth: number, cellHeight: number, handlers: SessionHandlers): Promise<SessionInfo>;
   write(data: string): Promise<void>;
+  /** Encode a key event against the live terminal mode in the backend and send to the PTY. */
+  key?(event: KeyLike): Promise<boolean>;
+  /** Encode pasted text (bracketed paste when active) in the backend and send to the PTY. */
+  paste?(text: string): Promise<void>;
+  /** Encode a mouse event against the live terminal mode in the backend and send to the PTY. */
+  mouse?(report: MouseReport): Promise<boolean>;
+  /** Handle a mouse wheel step against the live terminal mode in the backend. */
+  wheel?(lines: number, col: number, row: number, shift: boolean, alt: boolean, ctrl: boolean): Promise<void>;
+  /** Report focus change against the live terminal mode in the backend. */
+  focus?(focused: boolean): Promise<void>;
   resize(cols: number, rows: number, cellWidth: number, cellHeight: number): Promise<void>;
   /** Scroll the viewport through history; positive is up. */
   scroll(lines: number): Promise<void>;

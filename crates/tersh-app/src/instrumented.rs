@@ -68,6 +68,9 @@ impl Emulator for Measured {
     fn alt_screen(&self) -> bool {
         self.inner.alt_screen()
     }
+    fn mode(&self) -> u32 {
+        self.inner.mode()
+    }
     fn set_options(&mut self, options: &EmulatorOptions) {
         self.inner.set_options(options);
     }

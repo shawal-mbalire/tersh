@@ -144,12 +144,19 @@ export const Mode = {
   BRACKETED_PASTE: 1 << 4,
   SGR_MOUSE: 1 << 5,
   MOUSE_MOTION: 1 << 6,
+  LINE_FEED_NEW_LINE: 1 << 8,
   FOCUS_IN_OUT: 1 << 11,
   ALT_SCREEN: 1 << 12,
   MOUSE_DRAG: 1 << 13,
+  UTF8_MOUSE: 1 << 14,
   ALTERNATE_SCROLL: 1 << 15,
-  /** Kitty keyboard protocol, "disambiguate escape codes" flag (pushed by e.g. Neovim). */
+  /** Kitty keyboard protocol flags (`TermMode::KITTY_KEYBOARD_PROTOCOL`). */
   DISAMBIGUATE_KEYS: 1 << 18,
+  REPORT_EVENT_TYPES: 1 << 19,
+  REPORT_ALTERNATE_KEYS: 1 << 20,
+  REPORT_ALL_KEYS_AS_ESC: 1 << 21,
+  REPORT_ASSOCIATED_TEXT: 1 << 22,
+  KITTY_KEYBOARD_PROTOCOL: (1 << 18) | (1 << 19) | (1 << 20) | (1 << 21) | (1 << 22),
   MOUSE_MODE: (1 << 3) | (1 << 6) | (1 << 13),
 } as const;
 

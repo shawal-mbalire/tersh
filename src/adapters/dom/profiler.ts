@@ -3,6 +3,7 @@
 // action). Measuring is always on and costs two `performance.now()` calls per
 // paint; polling and the overlay only run while it is visible.
 
+import type { KeyLike } from "../../domain/input";
 import { type BackendRates, rates, report, Samples, type UiProfile } from "../../domain/profile";
 import type { SessionStats } from "../../domain/types";
 import type { Backend } from "../../ports/backend";
@@ -124,6 +125,18 @@ export function profiled(backend: Backend, profiler: Profiler): Backend {
         return (data: string) => {
           profiler.input();
           return target.write(data);
+        };
+      }
+      if (prop === "key" && target.key) {
+        return (event: KeyLike) => {
+          if (event.type !== "keyup") profiler.input();
+          return target.key!(event);
+        };
+      }
+      if (prop === "paste" && target.paste) {
+        return (text: string) => {
+          profiler.input();
+          return target.paste!(text);
         };
       }
       if (prop === "startSession") {

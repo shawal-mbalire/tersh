@@ -110,6 +110,10 @@ export class TerminalApp<K extends KeyLike = KeyLike> {
   }
 
   paste(text: string): Promise<void> {
+    if (this.backend.paste) {
+      this.screen.clearSelection();
+      return this.backend.paste(text);
+    }
     return this.write(encodePaste(text, this.mode));
   }
 
@@ -217,6 +221,26 @@ export class TerminalApp<K extends KeyLike = KeyLike> {
     }
     const data = encodeKey(event, this.mode);
     if (data === null) return false;
+    if (this.backend.key) {
+      this.screen.clearSelection();
+      void this.backend.key(event);
+      return true;
+    }
+    void this.write(data);
+    return true;
+  }
+
+  /** A key was released. Sent only when the program enabled Kitty event reporting. */
+  keyUp(event: K): boolean {
+    if (!(this.mode & Mode.REPORT_EVENT_TYPES)) return false;
+    const upEvent = { ...event, type: "keyup" as const };
+    const data = encodeKey(upEvent, this.mode);
+    if (data === null) return false;
+    if (this.backend.key) {
+      this.screen.clearSelection();
+      void this.backend.key(upEvent);
+      return true;
+    }
     void this.write(data);
     return true;
   }
@@ -233,7 +257,11 @@ export class TerminalApp<K extends KeyLike = KeyLike> {
   }
 
   focusChanged(focused: boolean) {
-    if (this.mode & Mode.FOCUS_IN_OUT) void this.backend.write(focused ? "\x1b[I" : "\x1b[O");
+    if (this.backend.focus) {
+      void this.backend.focus(focused);
+    } else if (this.mode & Mode.FOCUS_IN_OUT) {
+      void this.backend.write(focused ? "\x1b[I" : "\x1b[O");
+    }
     this.events.emit("focus", focused);
   }
 
@@ -248,6 +276,10 @@ export class TerminalApp<K extends KeyLike = KeyLike> {
     if (action === "press") this.heldButton = button;
     if (action === "release") this.heldButton = null;
     const report = { action, button, held: this.heldButton !== null, col: cell.x, row: cell.y, ...mods };
+    if (this.backend.mouse) {
+      void this.backend.mouse(report);
+      return;
+    }
     const data = encodeMouse(report, this.mode);
     if (data) void this.backend.write(data);
   }
@@ -259,6 +291,10 @@ export class TerminalApp<K extends KeyLike = KeyLike> {
 
   /** The wheel moved `lines` (positive is down) over `cell`. */
   wheel(lines: number, cell: Cell, mods: Modifiers) {
+    if (this.backend.wheel) {
+      void this.backend.wheel(lines, cell.x, cell.y, mods.shift, mods.alt, mods.ctrl);
+      return;
+    }
     switch (wheelAction(this.mode, this.reportsMouse(mods.shift))) {
       case "report":
         for (let i = 0; i < Math.abs(lines); i++) this.mouse(lines < 0 ? "wheel-up" : "wheel-down", cell, 0, mods);

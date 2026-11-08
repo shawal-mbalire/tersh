@@ -22,8 +22,12 @@ use serde_json::Value;
 pub const OSC_NUMBER: &str = "7701";
 
 const INTRO: &[u8] = b"7701;";
+const FULL_INTRO: &[u8] = b"\x1b]7701;";
 const ESC: u8 = 0x1b;
 const BEL: u8 = 0x07;
+const CAN: u8 = 0x18;
+const SUB: u8 = 0x1a;
+const C1_ST: u8 = 0x9c;
 
 /// Payloads larger than this are discarded (the sequence is still consumed).
 pub const MAX_PAYLOAD: usize = 64 * 1024 * 1024;
@@ -82,13 +86,28 @@ impl OscScanner {
             match self.state {
                 State::Ground => {
                     if b == ESC {
-                        if let Some(start) = run_start.take() {
-                            if start < i {
-                                out(Chunk::Bytes(&input[start..i]));
+                        let rem = &input[i..];
+                        let n = rem.len().min(FULL_INTRO.len());
+                        if rem[..n] == FULL_INTRO[..n] {
+                            if let Some(start) = run_start.take() {
+                                if start < i {
+                                    out(Chunk::Bytes(&input[start..i]));
+                                }
                             }
+                            if n == FULL_INTRO.len() {
+                                self.prefix.clear();
+                                self.payload.clear();
+                                self.overflow = false;
+                                self.state = State::Payload;
+                                i += FULL_INTRO.len();
+                                continue;
+                            }
+                            self.prefix.extend_from_slice(rem);
+                            self.state = if n == 1 { State::Esc } else { State::Intro(n - 2) };
+                            break;
+                        } else if run_start.is_none() {
+                            run_start = Some(i);
                         }
-                        self.prefix.push(ESC);
-                        self.state = State::Esc;
                     } else if run_start.is_none() {
                         run_start = Some(i);
                     }
@@ -121,15 +140,16 @@ impl OscScanner {
                     }
                 },
                 State::Payload => match b {
-                    BEL => self.finish(&mut out),
+                    BEL | C1_ST => self.finish(&mut out),
+                    CAN | SUB => self.abort(),
                     ESC => self.state = State::PayloadEsc,
                     _ => self.push_payload(b),
                 },
                 State::PayloadEsc => {
                     self.finish(&mut out);
                     if b != b'\\' {
-                        // Any other escape also terminates the OSC; keep the
-                        // ESC and let the new sequence be scanned normally.
+                        // Any other escape also terminates the OSC; reprocess
+                        // the ESC and this byte from the ground state.
                         self.prefix.push(ESC);
                         self.state = State::Esc;
                         continue;
@@ -152,9 +172,27 @@ impl OscScanner {
         }
     }
 
+    /// Whether the scanner is holding a partial `ESC ] 7701 ;` prefix across reads.
+    pub fn has_pending(&self) -> bool {
+        !self.prefix.is_empty()
+    }
+
+    /// Flush any held-back prefix bytes as ordinary terminal output.
+    pub fn flush_pending(&mut self, mut out: impl FnMut(Chunk<'_>)) {
+        if !self.prefix.is_empty() {
+            self.mismatch(&mut out);
+        }
+    }
+
     fn mismatch(&mut self, out: &mut impl FnMut(Chunk<'_>)) {
         out(Chunk::Bytes(&self.prefix));
         self.prefix.clear();
+        self.state = State::Ground;
+    }
+
+    fn abort(&mut self) {
+        self.payload.clear();
+        self.overflow = false;
         self.state = State::Ground;
     }
 
@@ -329,6 +367,33 @@ mod tests {
         let (bytes, payloads) = scan(&[b"\x1b]7701;{}\x1b[0mz"]);
         assert_eq!(bytes, b"\x1b[0mz");
         assert_eq!(payloads, vec![b"{}".to_vec()]);
+    }
+
+    #[test]
+    fn cancel_aborts_interrupted_payload_without_swallowing_output() {
+        let (bytes, payloads) = scan(&[b"\x1b]7701;{\"unclosed\":1\x18after\x1b]7701;{\"half\":2\x1amore"]);
+        assert_eq!(bytes, b"aftermore");
+        assert!(payloads.is_empty());
+    }
+
+    #[test]
+    fn flushes_trailing_partial_prefix() {
+        let mut scanner = OscScanner::new();
+        let mut out = Vec::new();
+        scanner.feed(b"abc\x1b", |c| {
+            if let Chunk::Bytes(b) = c {
+                out.extend_from_slice(b);
+            }
+        });
+        assert_eq!(out, b"abc");
+        assert!(scanner.has_pending());
+        scanner.flush_pending(|c| {
+            if let Chunk::Bytes(b) = c {
+                out.extend_from_slice(b);
+            }
+        });
+        assert_eq!(out, b"abc\x1b");
+        assert!(!scanner.has_pending());
     }
 
     #[test]

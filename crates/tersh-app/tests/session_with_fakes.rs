@@ -471,9 +471,16 @@ fn input_and_scrolling_never_wait_for_output_parsing() {
     let ui = std::thread::spawn(move || {
         session.scroll(3);
         session.write(b"x").unwrap();
+        let tab = tersh_domain::input::KeyInput {
+            key: "Unidentified".into(),
+            code: "Tab".into(),
+            shift: true,
+            ..Default::default()
+        };
+        assert!(session.key(&tab).unwrap());
         session
     });
-    eventually("input", || pty.input.0.lock().unwrap().as_slice() == b"x");
+    eventually("input", || pty.input.0.lock().unwrap().as_slice() == b"x\x1b[Z");
     assert!(emulators.scrolls.lock().unwrap().is_empty(), "scrolls wait for the parse");
 
     release.send(()).unwrap();
@@ -481,7 +488,7 @@ fn input_and_scrolling_never_wait_for_output_parsing() {
     eventually("scrolls", || *emulators.scrolls.lock().unwrap() == [Scroll::Lines(3), Scroll::Bottom]);
     let session = ui.join().unwrap();
     session.write(b"y").unwrap();
-    eventually("more input", || pty.input.0.lock().unwrap().as_slice() == b"xy");
+    eventually("more input", || pty.input.0.lock().unwrap().as_slice() == b"x\x1b[Zy");
     // Not scrolled since: nothing more to undo.
     std::thread::sleep(Duration::from_millis(20));
     assert_eq!(emulators.scrolls.lock().unwrap().len(), 2);

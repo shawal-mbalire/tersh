@@ -5,6 +5,7 @@
 import { builtinRenderers } from "@tersh/cards";
 import type { TerminalApp } from "../../app/terminal";
 import type { RichMessage } from "../../domain/cards";
+import { effectiveKey } from "../../domain/input";
 import { Palette } from "../../domain/palette";
 import { type Cell, isEmpty, lineAt, rowSpans, type Selection, wordAt } from "../../domain/selection";
 import type { Config, Frame, Metrics } from "../../domain/types";
@@ -237,10 +238,29 @@ export class DomScreen implements Screen {
 
   private bindInput(app: TerminalApp<KeyboardEvent>) {
     const input = this.els.input;
+    const inCard = (target: EventTarget | null) => Boolean((target as HTMLElement | null)?.closest?.(".card"));
 
-    input.addEventListener("keydown", (e) => {
-      if (e.isComposing || this.composing || e.keyCode === 229) return;
-      if (app.key(e)) e.preventDefault();
+    window.addEventListener("keydown", (e) => {
+      if (inCard(e.target)) return;
+      if (document.activeElement !== input) input.focus();
+      if (e.isComposing || this.composing || e.key === "Dead" || e.keyCode === 229) return;
+      if (app.key(e)) {
+        e.preventDefault();
+        return;
+      }
+      // Bypass WebKit's <textarea> editing engine for direct printable keystrokes
+      // so WebKit never rewrites spaces to U+00A0 or drops keys when unfocused.
+      const key = effectiveKey(e);
+      if (!e.ctrlKey && !e.altKey && !e.metaKey && [...key].length === 1) {
+        e.preventDefault();
+        input.value = "";
+        app.typed(key);
+      }
+    });
+    window.addEventListener("keyup", (e) => {
+      if (inCard(e.target)) return;
+      if (e.isComposing || this.composing || e.key === "Dead" || e.keyCode === 229) return;
+      if (app.keyUp(e)) e.preventDefault();
     });
     input.addEventListener("input", () => {
       if (this.composing) return;
@@ -254,7 +274,8 @@ export class DomScreen implements Screen {
       input.value = "";
       app.composed(e.data);
     });
-    input.addEventListener("paste", (e) => {
+    window.addEventListener("paste", (e) => {
+      if (inCard(e.target)) return;
       e.preventDefault();
       const text = e.clipboardData?.getData("text/plain");
       if (text) void app.paste(text);
@@ -266,7 +287,7 @@ export class DomScreen implements Screen {
     };
     window.addEventListener("focus", () => {
       focusChanged(true);
-      if (!document.activeElement || document.activeElement === document.body) input.focus();
+      if (!inCard(document.activeElement)) input.focus();
     });
     window.addEventListener("blur", () => focusChanged(false));
   }

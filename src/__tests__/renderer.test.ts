@@ -113,4 +113,47 @@ describe("GridRenderer", () => {
     r.draw();
     expect(draws.map((d) => d.x)).toEqual([0, 9, 18]);
   });
+
+  it("applies and draws a 120x40 frame well within the 4ms frame budget", () => {
+    const { r } = renderer({});
+    r.resize(120, 40);
+    const fullLines = Array.from({ length: 40 }, (_, y) => ({
+      y,
+      runs: [run(0, "const x = 42; // "), { c: 17, n: 60, t: "x".repeat(60), fg: 0x01224466, bg: 257, f: 1 }],
+    }));
+    const fullFrame: Frame = {
+      ...frame([]),
+      cols: 120,
+      rows: 40,
+      full: true,
+      lines: fullLines,
+    };
+
+    // Warm up and measure full 120x40 redraw.
+    r.apply(fullFrame);
+    r.draw();
+    const fullIters = 50;
+    const t0 = performance.now();
+    for (let i = 0; i < fullIters; i++) {
+      r.apply(fullFrame);
+      r.draw();
+    }
+    const avgFullMs = (performance.now() - t0) / fullIters;
+    expect(avgFullMs).toBeLessThan(4);
+
+    // Measure incremental 1-row update (typical keystroke echo).
+    const diffFrame: Frame = {
+      ...fullFrame,
+      full: false,
+      lines: [{ y: 10, runs: [run(0, "echo hello world")] }],
+    };
+    const diffIters = 200;
+    const t1 = performance.now();
+    for (let i = 0; i < diffIters; i++) {
+      r.apply(diffFrame);
+      r.draw();
+    }
+    const avgDiffMs = (performance.now() - t1) / diffIters;
+    expect(avgDiffMs).toBeLessThan(0.5);
+  });
 });

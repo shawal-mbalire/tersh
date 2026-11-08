@@ -8,7 +8,7 @@
 
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::thread;
@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 
 use serde_json::Value;
 use tersh_domain::config::Cursor;
+use tersh_domain::input::{self, KeyInput, MouseAction, MouseReport, WheelAction};
 use tersh_domain::rich::{self, AnchorContext, Chunk, OscScanner};
 use tersh_domain::error::{AppError, Code, Result};
 use tersh_domain::update::Foreground;
@@ -209,6 +210,8 @@ struct Shared {
     shell_pid: Option<u32>,
     wake: mpsc::Sender<()>,
     closed: AtomicBool,
+    /// The PTY output stream has ended (or the session was dropped).
+    eof: AtomicBool,
     /// A frame was sent and the UI hasn't said it was drawn yet.
     in_flight: AtomicBool,
     /// The render loop is holding back changes until the frame in flight is drawn.
@@ -220,6 +223,9 @@ struct Shared {
     /// The viewport may be scrolled into history (set by every scroll up or
     /// down, so it may be stale-true but never stale-false).
     maybe_scrolled: AtomicBool,
+    /// Current terminal mode bitmask, updated whenever output is parsed or flushed
+    /// so input encoding never has to wait for `state`.
+    mode: AtomicU32,
     options: SessionOptions,
     clock: Arc<dyn TimePort>,
     started: Instant,
@@ -310,6 +316,7 @@ impl Session {
             }),
         });
         let emulator = ports.emulator.create(&options.emulator_options(), host.clone());
+        let initial_mode = emulator.mode();
 
         let (wake, wake_rx) = mpsc::channel();
         let shared = Arc::new(Shared {
@@ -320,10 +327,12 @@ impl Session {
             shell_pid,
             wake,
             closed: AtomicBool::new(false),
+            eof: AtomicBool::new(false),
             in_flight: AtomicBool::new(false),
             stalled: AtomicBool::new(false),
             scrolls: Mutex::new(Vec::new()),
             maybe_scrolled: AtomicBool::new(false),
+            mode: AtomicU32::new(initial_mode),
             options,
             started: ports.clock.now(),
             clock: ports.clock,
@@ -342,6 +351,10 @@ impl Session {
                 };
                 let Some(s) = weak.upgrade() else { break };
                 s.process(&buf[..n]);
+                let _ = s.wake.send(());
+            }
+            if let Some(s) = weak.upgrade() {
+                s.eof.store(true, Ordering::SeqCst);
                 let _ = s.wake.send(());
             }
         })?;
@@ -383,6 +396,85 @@ impl Session {
         }
         if !self.shared.host.send(bytes.into()) {
             return Err(AppError::new(Code::InputClosed, "the program's input is closed"));
+        }
+        Ok(())
+    }
+
+    /// Current terminal mode bitmask (`TermMode`), read without waiting for output parsing.
+    pub fn mode(&self) -> u32 {
+        self.shared.mode.load(Ordering::SeqCst)
+    }
+
+    /// Encode a key event against the live terminal mode and send any resulting bytes to the PTY.
+    /// Returns `Ok(true)` if the key was handled by the terminal (even if it produced no bytes,
+    /// such as a `keyup` when `REPORT_EVENT_TYPES` is off).
+    pub fn key(&self, event: &KeyInput) -> Result<bool> {
+        let Some(bytes) = input::encode_key(event, self.mode()) else {
+            return Ok(false);
+        };
+        if !bytes.is_empty() {
+            self.write(bytes)?;
+        }
+        Ok(true)
+    }
+
+    /// Encode pasted text (bracketed paste when active, otherwise CR-normalized) and send to the PTY.
+    pub fn paste(&self, text: &str) -> Result<()> {
+        let bytes = input::encode_paste(text, self.mode());
+        if !bytes.is_empty() {
+            self.write(bytes)?;
+        }
+        Ok(())
+    }
+
+    /// Encode a mouse event against the live terminal mode and send any resulting report to the PTY.
+    pub fn mouse(&self, report: &MouseReport) -> Result<bool> {
+        let Some(bytes) = input::encode_mouse(report, self.mode()) else {
+            return Ok(false);
+        };
+        if !self.shared.host.send(bytes.into_bytes()) {
+            return Err(AppError::new(Code::InputClosed, "the program's input is closed"));
+        }
+        Ok(true)
+    }
+
+    /// Handle a mouse wheel step (`lines < 0` is wheel up) according to live terminal mode.
+    pub fn wheel(&self, lines: i32, col: u16, row: u16, shift: bool, alt: bool, ctrl: bool) -> Result<()> {
+        if lines == 0 {
+            return Ok(());
+        }
+        let mode = self.mode();
+        match input::wheel_action(mode, shift) {
+            WheelAction::Report => {
+                let action = if lines < 0 { MouseAction::WheelUp } else { MouseAction::WheelDown };
+                let report = MouseReport { action, button: 0, held: false, col, row, shift, alt, ctrl };
+                if let Some(seq) = input::encode_mouse(&report, mode) {
+                    let count = lines.unsigned_abs().min(10) as usize;
+                    if !self.shared.host.send(seq.repeat(count).into_bytes()) {
+                        return Err(AppError::new(Code::InputClosed, "the program's input is closed"));
+                    }
+                }
+            },
+            WheelAction::Keys => {
+                let bytes = input::wheel_keys(lines, mode);
+                if !bytes.is_empty() && !self.shared.host.send(bytes.into_bytes()) {
+                    return Err(AppError::new(Code::InputClosed, "the program's input is closed"));
+                }
+            },
+            WheelAction::History => {
+                self.scroll(-lines);
+            },
+        }
+        Ok(())
+    }
+
+    /// Report focus change to the running program if `FOCUS_IN_OUT` (DECSET 1004) is active.
+    pub fn focus(&self, focused: bool) -> Result<()> {
+        if self.mode() & input::mode::FOCUS_IN_OUT != 0 {
+            let seq = if focused { b"\x1b[I".to_vec() } else { b"\x1b[O".to_vec() };
+            if !self.shared.host.send(seq) {
+                return Err(AppError::new(Code::InputClosed, "the program's input is closed"));
+            }
         }
         Ok(())
     }
@@ -472,6 +564,7 @@ impl Session {
 impl Drop for Session {
     fn drop(&mut self) {
         self.shared.closed.store(true, Ordering::SeqCst);
+        self.shared.eof.store(true, Ordering::SeqCst);
         lock(&self.shared.killer).kill();
         // A background program may still hold the terminal open; stop reading anyway.
         lock(&self.shared.control).hangup();
@@ -491,20 +584,26 @@ impl Shared {
         {
             let mut state = lock(&self.state);
             let State { emulator, scanner, .. } = &mut *state;
-            let osc_rich = self.options.osc_rich;
-            scanner.feed(bytes, |chunk| match chunk {
-                Chunk::Bytes(bytes) => emulator.advance(bytes),
-                Chunk::Payload(payload) if osc_rich => {
-                    // Apply output buffered by a synchronized update first, so
-                    // the cursor is where the program thinks it is.
-                    if emulator.sync_deadline().is_some() {
-                        emulator.flush_sync();
-                    }
-                    messages.push((payload, emulator.anchor_context()));
-                },
-                Chunk::Payload(_) => {},
-                Chunk::Oversized => log::warn!("dropping rich payload larger than {} bytes", rich::MAX_PAYLOAD),
-            });
+            if emulator.sync_deadline().is_some_and(|d| self.clock.now() >= d) {
+                emulator.flush_sync();
+            }
+            if self.options.osc_rich {
+                scanner.feed(bytes, |chunk| match chunk {
+                    Chunk::Bytes(bytes) => emulator.advance(bytes),
+                    Chunk::Payload(payload) => {
+                        // Apply output buffered by a synchronized update first, so
+                        // the cursor is where the program thinks it is.
+                        if emulator.sync_deadline().is_some() {
+                            emulator.flush_sync();
+                        }
+                        messages.push((payload, emulator.anchor_context()));
+                    },
+                    Chunk::Oversized => log::warn!("dropping rich payload larger than {} bytes", rich::MAX_PAYLOAD),
+                });
+            } else {
+                emulator.advance(bytes);
+            }
+            self.mode.store(emulator.mode(), Ordering::SeqCst);
         }
         let counters = &self.host.counters;
         add(&counters.output_bytes, bytes.len() as u64);
@@ -595,14 +694,30 @@ impl Shared {
         loop {
             // Wake for new output, when a synchronized update times out, or
             // when a frame in flight has waited too long to be acknowledged.
-            let deadline = lock(&self.state).emulator.sync_deadline();
+            let (deadline, pending_esc) = {
+                let state = lock(&self.state);
+                (state.emulator.sync_deadline(), state.scanner.has_pending())
+            };
             let mut wait = deadline.map_or(IDLE_WAIT, |d| d.saturating_duration_since(self.clock.now()));
+            if pending_esc {
+                wait = wait.min(FRAME_INTERVAL);
+            }
             if self.stalled.load(Ordering::SeqCst) {
                 wait = wait.min(FRAME_ACK_TIMEOUT.saturating_sub(self.clock.now() - sent_at));
             }
             match wake.recv_timeout(wait) {
                 Ok(()) | Err(RecvTimeoutError::Timeout) => {},
                 Err(RecvTimeoutError::Disconnected) => return,
+            }
+            // Flush expired synchronized updates even while a frame is in flight,
+            // because vte buffers terminal queries (DSR/CPR, DA1, OSC 10/11) inside
+            // synchronized blocks until they end or time out.
+            if deadline.is_some_and(|d| self.clock.now() >= d) {
+                let mut state = lock(&self.state);
+                if state.emulator.sync_deadline().is_some_and(|d| self.clock.now() >= d) {
+                    state.emulator.flush_sync();
+                    self.mode.store(state.emulator.mode(), Ordering::SeqCst);
+                }
             }
             // One frame in flight: let changes pile up in the emulator until the
             // UI has drawn it. `stalled` is set before checking again, so an
@@ -623,7 +738,12 @@ impl Shared {
 
             let mut frame = {
                 let mut state = lock(&self.state);
-                let State { emulator, force_full, .. } = &mut *state;
+                let State { emulator, scanner, force_full } = &mut *state;
+                scanner.flush_pending(|chunk| {
+                    if let Chunk::Bytes(bytes) = chunk {
+                        emulator.advance(bytes);
+                    }
+                });
                 for scroll in std::mem::take(&mut *lock(&self.scrolls)) {
                     emulator.scroll(scroll);
                 }
@@ -635,6 +755,7 @@ impl Shared {
                     emulator.flush_sync();
                 }
                 let frame = emulator.frame(*force_full);
+                self.mode.store(frame.mode, Ordering::SeqCst);
                 *force_full = false;
                 let counters = &self.host.counters;
                 add(&counters.frames_built, 1);
@@ -659,7 +780,7 @@ impl Shared {
                 add(&self.host.counters.frames_skipped, 1);
             }
 
-            if self.closed.load(Ordering::SeqCst) {
+            if self.closed.load(Ordering::SeqCst) && self.eof.load(Ordering::SeqCst) {
                 return;
             }
         }

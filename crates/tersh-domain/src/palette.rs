@@ -38,8 +38,14 @@ impl Palette {
     }
 
     /// Colour at a palette index: 0-255 xterm colours, 256 foreground,
-    /// 257 background, 258 cursor.
+    /// 257 background, 258 cursor, 259-266 dim ANSI, 267 bright foreground,
+    /// 268 dim foreground.
     pub fn get(&self, index: usize) -> Rgb {
+        let dim = |c: Rgb| Rgb {
+            r: (c.r as u16 * 2 / 3) as u8,
+            g: (c.g as u16 * 2 / 3) as u8,
+            b: (c.b as u16 * 2 / 3) as u8,
+        };
         match index {
             0..=15 => self.ansi[index],
             16..=231 => {
@@ -53,6 +59,8 @@ impl Palette {
             },
             257 => self.background,
             258 => self.cursor,
+            259..=266 => dim(self.ansi[index - 259]),
+            268 => dim(self.foreground),
             _ => self.foreground,
         }
     }

@@ -163,6 +163,10 @@ pub trait Emulator: Send {
     /// Cursor position and screen, for anchoring rich cards.
     fn anchor_context(&self) -> AnchorContext;
     fn alt_screen(&self) -> bool;
+    /// Current terminal mode bitmask (`TermMode` flags).
+    fn mode(&self) -> u32 {
+        0
+    }
     /// The viewport rows changed since the last call (all of them if `full`).
     fn frame(&mut self, full: bool) -> Frame;
     fn set_options(&mut self, options: &EmulatorOptions);

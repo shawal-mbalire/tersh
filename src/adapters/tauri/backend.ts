@@ -6,6 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { readText, writeText } from "@tauri-apps/plugin-clipboard-manager";
 import type { RichMessage } from "../../domain/cards";
+import type { KeyLike, MouseReport } from "../../domain/input";
 import type { Frame, SessionInfo, SessionStats, Settings, TermEvent } from "../../domain/types";
 import type { Backend, PluginSource, SessionHandlers } from "../../ports/backend";
 
@@ -22,6 +23,38 @@ export class TauriBackend implements Backend {
 
   write(data: string) {
     return invoke<void>("session_write", { data });
+  }
+
+  key(event: KeyLike) {
+    return invoke<boolean>("session_key", {
+      event: {
+        key: event.key,
+        code: event.code ?? "",
+        location: event.location ?? 0,
+        ctrlKey: event.ctrlKey,
+        altKey: event.altKey,
+        shiftKey: event.shiftKey,
+        metaKey: event.metaKey,
+        repeat: event.repeat ?? false,
+        type: event.type ?? "keydown",
+      },
+    });
+  }
+
+  paste(text: string) {
+    return invoke<void>("session_paste", { text });
+  }
+
+  mouse(report: MouseReport) {
+    return invoke<boolean>("session_mouse", { report });
+  }
+
+  wheel(lines: number, col: number, row: number, shift: boolean, alt: boolean, ctrl: boolean) {
+    return invoke<void>("session_wheel", { lines, col, row, shift, alt, ctrl });
+  }
+
+  focus(focused: boolean) {
+    return invoke<void>("session_focus", { focused });
   }
 
   resize(cols: number, rows: number, cellWidth: number, cellHeight: number) {

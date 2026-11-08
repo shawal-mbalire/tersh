@@ -8,6 +8,7 @@ pub mod env;
 pub mod error;
 pub mod event;
 pub mod frame;
+pub mod input;
 pub mod palette;
 pub mod rich;
 pub mod stats;

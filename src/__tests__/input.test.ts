@@ -21,6 +21,31 @@ describe("encodeKey", () => {
     expect(encodeKey(key("Enter"), kitty)).toBe("\r");
     expect(encodeKey(key("Escape"), kitty)).toBe("\x1b[27u");
     expect(encodeKey(key("Tab", { shiftKey: true }), kitty)).toBe("\x1b[9;2u");
+    expect(encodeKey(key("c", { ctrlKey: true }), kitty)).toBe("\x1b[99;5u");
+    expect(encodeKey(key("x", { altKey: true }), kitty)).toBe("\x1b[120;3u");
+    expect(encodeKey(key(" ", { shiftKey: true }), kitty)).toBe("\x1b[32;2u");
+    expect(encodeKey(key("a"), kitty)).toBeNull();
+  });
+
+  it("supports Kitty report-all-keys, event types, alternate keys and associated text", () => {
+    const reportAll = Mode.DISAMBIGUATE_KEYS | Mode.REPORT_ALL_KEYS_AS_ESC;
+    expect(encodeKey(key("Enter"), reportAll)).toBe("\x1b[13u");
+    expect(encodeKey(key("Tab"), reportAll)).toBe("\x1b[9u");
+    expect(encodeKey(key("Backspace"), reportAll)).toBe("\x1b[127u");
+    expect(encodeKey(key("a"), reportAll)).toBe("\x1b[97u");
+    expect(encodeKey(key("Shift", { code: "ShiftLeft", shiftKey: true }), reportAll)).toBe("\x1b[57441;2u");
+
+    const fullKitty =
+      Mode.DISAMBIGUATE_KEYS |
+      Mode.REPORT_EVENT_TYPES |
+      Mode.REPORT_ALTERNATE_KEYS |
+      Mode.REPORT_ALL_KEYS_AS_ESC |
+      Mode.REPORT_ASSOCIATED_TEXT;
+    expect(encodeKey(key("A", { code: "KeyA", shiftKey: true }), fullKitty)).toBe("\x1b[97:65;2;65u");
+    expect(encodeKey(key("a", { repeat: true }), fullKitty)).toBe("\x1b[97;1:2;97u");
+    expect(encodeKey(key("a", { type: "keyup" }), fullKitty)).toBe("\x1b[97;1:3u");
+    expect(encodeKey(key("ArrowUp", { type: "keyup" }), Mode.REPORT_EVENT_TYPES)).toBe("\x1b[1;1:3A");
+    expect(encodeKey(key("a", { type: "keyup" }), 0)).toBeNull();
   });
 
   it("leaves plain text to the input element", () => {
@@ -48,6 +73,9 @@ describe("encodeKey", () => {
   it("encodes editing and function keys", () => {
     expect(encodeKey(key("Backspace"), 0)).toBe("\x7f");
     expect(encodeKey(key("Tab", { shiftKey: true }), 0)).toBe("\x1b[Z");
+    // WebKitGTK on Linux reports Shift+Tab (GDK_KEY_ISO_Left_Tab) as key="Unidentified", code="Tab".
+    expect(encodeKey(key("Unidentified", { code: "Tab", shiftKey: true }), 0)).toBe("\x1b[Z");
+    expect(encodeKey(key("Unidentified", { code: "Tab", shiftKey: true }), Mode.DISAMBIGUATE_KEYS)).toBe("\x1b[9;2u");
     expect(encodeKey(key("Delete"), 0)).toBe("\x1b[3~");
     expect(encodeKey(key("PageUp", { shiftKey: true }), 0)).toBe("\x1b[5;2~");
     expect(encodeKey(key("F1"), 0)).toBe("\x1bOP");
