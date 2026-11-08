@@ -1,6 +1,6 @@
 {
   "name": "@tersh/cards",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "The renderers tersh draws rich cards with: Jupyter notebooks, markdown with LaTeX, Plotly, HTML, SVG, images and video, for any web page.",
   "license": "MIT",
   "type": "module",
