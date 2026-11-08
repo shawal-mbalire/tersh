@@ -10,7 +10,7 @@ const config = (overrides: Partial<Config> = {}): Config => ({
   env: {},
   scrollback: 1000,
   font: { family: "monospace", size: 14, line_height: 1.2, bold_is_bright: false },
-  window: { padding: 10, opacity: 0.9, blur: true, width: 800, height: 600 },
+  window: { padding: 10, opacity: 0.9, blur: true, decorations: false, width: 800, height: 600 },
   cursor: { shape: "block", blink: false },
   theme: {
     name: "test",

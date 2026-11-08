@@ -94,7 +94,7 @@ export interface Config {
   env: Record<string, string>;
   scrollback: number;
   font: { family: string; size: number; line_height: number; bold_is_bright: boolean };
-  window: { padding: number; opacity: number; blur: boolean; width: number; height: number };
+  window: { padding: number; opacity: number; blur: boolean; decorations: boolean; width: number; height: number };
   cursor: { shape: "block" | "beam" | "underline"; blink: boolean };
   theme: Theme;
   keybindings: Record<string, Binding>;

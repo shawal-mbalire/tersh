@@ -16,7 +16,7 @@ function config(): Config {
     env: {},
     scrollback: 1000,
     font: { family: "monospace", size: 14, line_height: 1.2, bold_is_bright: false },
-    window: { padding: 8, opacity: 1, blur: false, width: 800, height: 600 },
+    window: { padding: 8, opacity: 1, blur: false, decorations: false, width: 800, height: 600 },
     cursor: { shape: "block", blink: false },
     theme: {
       name: "t",

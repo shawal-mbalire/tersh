@@ -68,6 +68,9 @@ fn reload(app: &AppHandle) -> Settings {
     if let Some(session) = state.session.lock().unwrap().as_ref() {
         session.reconfigure(&config);
     }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_decorations(config.window.decorations);
+    }
     *state.config.lock().unwrap() = config.clone();
     let settings = Settings::new(&*state.store, &*state.fonts, config);
     if let Err(e) = app.emit("settings-changed", &settings) {

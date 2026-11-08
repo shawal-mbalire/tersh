@@ -47,10 +47,12 @@ mod tests {
 
     #[test]
     fn partial_config_keeps_defaults() {
-        let config = parse("shell = 'fish'\n[font]\nsize = 16\n").unwrap();
+        let config = parse("shell = 'fish'\n[font]\nsize = 16\n[window]\ndecorations = true\n").unwrap();
         assert_eq!(config.shell(), Some("fish"));
         assert_eq!(config.font.size, 16.0);
         assert_eq!(config.font.line_height, 1.2);
+        assert!(config.window.decorations);
+        assert!(!Config::default().window.decorations);
         assert_eq!(config.theme.palette.len(), 16);
         assert!(config.rich.enabled);
     }

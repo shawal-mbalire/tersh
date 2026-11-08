@@ -342,7 +342,7 @@ fn create_window(app: &AppHandle, config: &Config, size: Option<(f64, f64)>) -> 
         .inner_size(width, height)
         .min_inner_size(200.0, 100.0)
         .visible(false)
-        .decorations(false)
+        .decorations(config.window.decorations)
         .transparent(true)
         .background_color(tauri::window::Color(0, 0, 0, 0))
         .shadow(true)

@@ -99,13 +99,15 @@ pub struct Window {
     pub opacity: f32,
     /// Ask the OS for a blurred (acrylic / vibrancy) backdrop where supported.
     pub blur: bool,
+    /// Show native window decorations (title bar and border).
+    pub decorations: bool,
     pub width: f64,
     pub height: f64,
 }
 
 impl Default for Window {
     fn default() -> Self {
-        Self { padding: 10.0, opacity: 0.92, blur: true, width: 960.0, height: 600.0 }
+        Self { padding: 10.0, opacity: 0.92, blur: true, decorations: false, width: 960.0, height: 600.0 }
     }
 }
 
