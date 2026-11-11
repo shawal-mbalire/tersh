@@ -1,4 +1,4 @@
-//! Runs the Neovim plugin (editors/nvim) inside a real session: cards must be
+//! Runs the Neovim plugin (nvim/) inside a real session: cards must be
 //! anchored on the alternate screen and follow scrolling. Skipped without `nvim`.
 #![cfg(unix)]
 
@@ -43,7 +43,7 @@ fn nvim_line_card_follows_scrolling() {
     }
     // This crate is backend/adapters: the repository is two folders up.
     let repo = Path::new(env!("CARGO_MANIFEST_DIR")).ancestors().nth(2).unwrap();
-    let plugin = repo.join("editors").join("nvim");
+    let plugin = repo.join("nvim");
     let dir = std::env::temp_dir().join(format!("tersh-nvim-e2e-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let lines: Vec<String> = (1..=100).map(|i| format!("line {i}")).collect();

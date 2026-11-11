@@ -1,5 +1,5 @@
 -- Headless tests for tersh.nvim against a fake tersh socket.
--- Run: nvim --headless -u NONE -l editors/nvim/tests/run.lua
+-- Run: nvim --headless -u NONE -l nvim/tests/run.lua (or `just nvim-test`)
 
 local uv = vim.uv or vim.loop
 local root = vim.fn.fnamemodify(debug.getinfo(1, "S").source:sub(2), ":p:h:h")
@@ -563,10 +563,10 @@ end)
 
 test("the repository root works as a plugin directory", function()
   vim.g.loaded_tersh = nil
-  local repo = vim.fn.fnamemodify(root, ":h:h")
+  local repo = vim.fn.fnamemodify(root, ":h")
   vim.cmd.source(repo .. "/plugin/tersh.lua")
   eq(vim.fn.exists(":TershPreview"), 2, "commands defined")
-  eq(vim.tbl_contains(vim.opt.runtimepath:get(), root), true, "editors/nvim on runtimepath")
+  eq(vim.tbl_contains(vim.opt.runtimepath:get(), root), true, "nvim/ on runtimepath")
 end)
 
 io.write(string.format("\n%d passed, %d failed\n", passed, failures))

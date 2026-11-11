@@ -1,6 +1,6 @@
 # tersh.nvim
 
-The plugin in [`editors/nvim`](/editors/nvim) draws tersh cards in Neovim:
+The plugin in [`nvim/`](/nvim) draws tersh cards in Neovim:
 
 - **Line cards** sit below a buffer line. They reserve blank virtual lines,
   so they never cover text, and follow the line through scrolling, inserted
@@ -15,16 +15,37 @@ back to escape sequences.
 
 ## Install
 
+Install it like any other plugin, from the repository, so the plugin manager
+owns the copy and pins it:
+
 ```lua
--- lazy.nvim: straight from the tersh repository
-{ "shawal-mbalire/tersh", main = "tersh", lazy = false, opts = {} }
--- a local checkout
-{ dir = "~/src/tersh", name = "tersh", main = "tersh", lazy = false, opts = {} }
--- other managers: add editors/nvim to 'runtimepath' and call require("tersh").setup()
+-- lazy.nvim: the repository's lazy.lua sets main = "tersh", lazy = false, opts = {}
+{ "shawal-mbalire/tersh", version = "*" } -- latest release tag; drop version for main
+
+-- Neovim 0.12's vim.pack
+vim.pack.add({ { src = "https://github.com/shawal-mbalire/tersh", version = vim.version.range("*") } })
 ```
 
-Keep `lazy = false`. The plugin is small, and it has to be loaded at startup to
-render files as they open. `:checkhealth tersh` checks the connection to
+The repository root works as a plugin directory for any manager:
+`plugin/tersh.lua` adds `nvim/`, where the plugin lives, to `'runtimepath'`.
+It needs no other Neovim plugins and works without calling `setup()`; call
+`require("tersh").setup({...})` (or pass `opts`) to change the options below.
+It has to load at startup to render files as they open, so don't lazy-load it.
+
+### Hacking on a checkout
+
+Don't point the spec at a checkout with `dir = ...`: if the checkout is moved
+or deleted, Neovim loses the plugin. Use lazy.nvim's `dev` mode instead, which
+uses the checkout while it exists and the installed copy otherwise:
+
+````lua
+require("lazy").setup({
+  spec = { --[[ ... ]] },
+  dev = { path = "~/GitHub", fallback = true }, -- ~/GitHub/tersh when present, else git
+})
+-- and in the tersh spec:
+{ "shawal-mbalire/tersh", version = "*", dev = true }
+``` `:checkhealth tersh` checks the connection to
 tersh and the tmux settings.
 
 Neovim 0.10 or newer.
@@ -44,7 +65,7 @@ require("tersh").setup({
   debounce = 150,                                   -- ms between an edit and the preview update
   force = false,                                    -- send even if tersh isn't detected
 })
-```
+````
 
 ## Notebooks
 
@@ -109,7 +130,7 @@ do what they say.
 
 The kernel starts on the first run and stops when the buffer is closed or
 Neovim exits. tersh runs a small bridge,
-[`python/tersh_kernel.py`](/editors/nvim/python/tersh_kernel.py), with a
+[`python/tersh_kernel.py`](/nvim/python/tersh_kernel.py), with a
 Python that has `jupyter_client`, and picks the kernel like this:
 
 1. the kernelspec named in the notebook's metadata, if it is installed;
@@ -120,10 +141,13 @@ Python that has `jupyter_client`, and picks the kernel like this:
 4. `uv run --with ipykernel` in the notebook's directory, which uses the
    project's dependencies in a uv project.
 
-The bridge's Python is chosen from the same list (it needs `jupyter_client`),
-falling back to `uv run --with jupyter_client`. With uv installed nothing else
-is needed. Otherwise install `jupyter_client` and `ipykernel` into one of
-those Pythons. The kernel uses local IPC sockets, not TCP.
+The bridge declares its own dependencies (`jupyter_client`) at the top of the
+script ([PEP 723](https://peps.python.org/pep-0723/)), and runs with
+`uv run --script`, which installs exactly those into uv's cache. So with uv
+installed nothing else is needed, and the bridge doesn't break when a system
+or Homebrew Python changes. A `kernel.python` you set is used first if it has
+`jupyter_client`; without uv, the first of the Pythons above that has it. The
+kernel uses local IPC sockets, not TCP.
 
 ```lua
 require("tersh").setup({

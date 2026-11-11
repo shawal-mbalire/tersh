@@ -34,7 +34,7 @@ injection. [`just`](/justfile) drives both halves.
         ┌──────────────────────────┐            ┌──────────────────────────────┐
         │ backend/desktop (app)    │            │ tersh-adapters               │
         │ tersh-show (CLI)         │            │   pty        portable-pty    │
-        │ editors/nvim (plugin)    │            │   emulator   alacritty       │
+        │ nvim (plugin)            │            │   emulator   alacritty       │
         └────────────┬─────────────┘            │   socket     Unix socket     │
                      │ use cases                │   config_fs  ~/.config/tersh │
              ┌───────▼──────────────────────────┴───────▲──────────────────┐
