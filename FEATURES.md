@@ -11,7 +11,7 @@ Until then, check it by hand before a release.
 
 **Automated by:** `bun` = `bun test` via `just frontend-test` (`frontend/src/__tests__`, `frontend/packages/cards/test`);
 `cargo` = `cargo test` (crate named); `nvim` =
-`editors/nvim/tests/run.lua`; `install.yml` = the installer workflow on all
+`nvim/tests/run.lua`; `install.yml` = the installer workflow on all
 three OSes; `ci desktop` = the Tauri build and clippy on Linux.
 
 ## Install and update (INST)

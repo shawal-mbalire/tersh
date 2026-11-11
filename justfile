@@ -85,7 +85,7 @@ desktop-test:
 
 # The Neovim plugin's tests.
 nvim-test:
-    nvim --headless -u NONE -l {{root}}/editors/nvim/tests/run.lua
+    nvim --headless -u NONE -l {{root}}/nvim/tests/run.lua
 
 # Type-check the page, Angular templates included.
 typecheck:

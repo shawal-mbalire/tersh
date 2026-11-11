@@ -283,7 +283,12 @@ LUAEOF
     tar -xzf "$tmp/src.tar.gz" -C "$tmp"
     rm -rf "$pack"
     mkdir -p "$(dirname "$pack")"
-    cp -R "$tmp/tersh-$number/editors/nvim" "$pack"
+    # The plugin moved from editors/nvim to nvim/ after 0.6.1.
+    if [ -d "$tmp/tersh-$number/nvim/lua" ]; then
+      cp -R "$tmp/tersh-$number/nvim" "$pack"
+    else
+      cp -R "$tmp/tersh-$number/editors/nvim" "$pack"
+    fi
     [ -d "$nvim_data/lazy/lazy.nvim" ] \
       && echo "    lazy.nvim found without lua/plugins/: add { \"shawal-mbalire/tersh\", main = \"tersh\", lazy = false, opts = {} } to your specs"
   fi

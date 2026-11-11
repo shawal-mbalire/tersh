@@ -276,7 +276,7 @@ or by sending JSON lines to `$TERSH_SOCKET`. See
 
 ### Neovim
 
-The plugin in `editors/nvim` attaches cards to buffer lines. They reserve
+The plugin in `nvim/` attaches cards to buffer lines. They reserve
 blank virtual lines and follow the line through scrolling, edits, folds,
 splits and tmux panes. Notebooks open as Jupyter-style cells: code you
 edit with its outputs below, rendered markdown, `In`/`Out` prompts and

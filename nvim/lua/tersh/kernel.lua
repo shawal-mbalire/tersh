@@ -4,9 +4,10 @@
 -- jupyter_client; this module starts it and exchanges JSON lines with it.
 --
 -- Choosing Pythons, in order:
---   bridge: config.kernel.python, the notebook's .venv, $VIRTUAL_ENV,
---           $CONDA_PREFIX, python3 (whichever has jupyter_client), else
---           `uv run --with jupyter_client`.
+--   bridge: config.kernel.python (if it has jupyter_client), else
+--           `uv run --script`, which installs the dependencies the script
+--           declares (PEP 723), else the notebook's .venv, $VIRTUAL_ENV,
+--           $CONDA_PREFIX or python3, whichever has jupyter_client.
 --   kernel: the notebook's kernelspec if installed, else config.kernel.argv,
 --           else the first of those Pythons with ipykernel, else
 --           `uv run --with ipykernel` in the notebook's directory (which uses
@@ -76,15 +77,22 @@ function M.bridge_command(dir)
   if config().bridge then
     return config().bridge
   end
+  -- A Python the user chose comes first.
+  local chosen = config().python and vim.fn.expand(config().python)
+  if chosen and vim.fn.executable(chosen) == 1 and has_module(chosen, "jupyter_client") then
+    return { chosen, script }
+  end
+  -- The bridge declares its dependencies (PEP 723, at the top of the script):
+  -- with uv they are installed exactly, whatever Pythons happen to be around.
+  if has_uv() then
+    return { "uv", "run", "--quiet", "--script", script }
+  end
   for _, python in ipairs(pythons(dir)) do
     if has_module(python, "jupyter_client") then
       return { python, script }
     end
   end
-  if has_uv() then
-    return { "uv", "run", "--no-project", "--quiet", "--with", "jupyter_client", "python", script }
-  end
-  return nil, "no Python with jupyter_client found; install it (pip install jupyter_client ipykernel) or install uv"
+  return nil, "no Python with jupyter_client found; install uv (recommended) or pip install jupyter_client ipykernel"
 end
 
 --- The kernel command line used when the notebook's kernelspec isn't installed.

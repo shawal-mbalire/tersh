@@ -1,7 +1,12 @@
+# /// script
+# requires-python = ">=3.9"
+# dependencies = ["jupyter_client>=8"]
+# ///
 """Bridge between tersh.nvim and a Jupyter kernel.
 
-Neovim runs this with a Python that has jupyter_client, and talks to it in
-JSON lines over stdin/stdout.
+Neovim runs it with `uv run --script`, which installs the dependencies declared
+above into uv's cache (or, without uv, with a Python that has jupyter_client),
+and talks to it in JSON lines over stdin/stdout.
 
 Requests (stdin):
   {"op": "start", "kernel": "python3" | null, "argv": [...] | null, "cwd": "..."}

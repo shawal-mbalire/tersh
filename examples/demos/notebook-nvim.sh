@@ -13,7 +13,7 @@ repo=$(dirname "$(dirname "$here")") # examples/demos → examples → the repos
 notebook=${1:-$here/showcase.ipynb}
 
 exec nvim --clean \
-  --cmd "set runtimepath^=$repo/editors/nvim" \
+  --cmd "set runtimepath^=$repo/nvim" \
   -c "set termguicolors number" \
   -c "lua require('tersh').setup({ preview = { split = 'vertical', size = 0.6 } })" \
   -c "edit $notebook"
