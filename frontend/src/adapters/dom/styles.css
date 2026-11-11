@@ -1,0 +1,305 @@
+/* Bundled Nerd Fonts symbols (MIT, see fonts/LICENSE-nerd-fonts.txt), used only
+   for icon codepoints so any text font gets working icons. */
+@font-face {
+  font-family: "tersh Symbols";
+  src: url("./fonts/SymbolsNerdFontMono-Regular.woff2") format("woff2");
+  font-display: block;
+  unicode-range: U+23FB-23FE, U+2630, U+2665, U+26A1, U+276C-2771, U+2B58, U+E000-F8FF, U+F0000-FFFFD;
+}
+
+:root {
+  --bg: rgba(30, 30, 46, 0.92);
+  --bg-solid: #1e1e2e;
+  --fg: #cdd6f4;
+  --cursor: #f5e0dc;
+  --selection: #585b70;
+  --accent: #cba6f7;
+  --padding: 10px;
+  --font-family: monospace;
+  --font-size: 14px;
+  --card-bg: color-mix(in srgb, var(--bg-solid) 96%, white 4%);
+  --card-border: color-mix(in srgb, var(--fg) 16%, transparent);
+  --code-bg: color-mix(in srgb, var(--fg) 7%, transparent);
+  --error: var(--ansi-9, #f38ba8);
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+
+:root[data-theme-kind="light"] {
+  --card-bg: color-mix(in srgb, var(--bg-solid) 96%, black 4%);
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg);
+  font-family: system-ui, sans-serif;
+  font-size: 13px;
+}
+
+body {
+  background: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* The Angular shell's host element adds no box of its own. */
+tersh-root {
+  display: contents;
+}
+
+body.fatal {
+  padding: 2em;
+  font-family: var(--font-family);
+  background: var(--bg-solid);
+}
+
+/* Window drag strip along the top padding. */
+#drag {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: max(var(--padding), 6px);
+  z-index: 10;
+}
+
+#terminal {
+  position: absolute;
+  inset: var(--padding);
+  cursor: text;
+}
+
+#grid {
+  outline: 9999px solid var(--bg);
+}
+
+#grid,
+#selection,
+#cursor,
+#cards {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+#selection > div {
+  position: absolute;
+  background: var(--selection);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+#selection {
+  pointer-events: none;
+}
+
+#cursor {
+  pointer-events: none;
+  background: var(--cursor);
+  color: var(--bg-solid);
+  font-family: var(--font-family);
+  font-size: var(--font-size);
+  white-space: pre;
+  overflow: hidden;
+}
+#cursor.shape-underline {
+  background: none;
+  border-bottom: 2px solid var(--cursor);
+}
+#cursor.shape-beam {
+  background: none;
+  border-left: 2px solid var(--cursor);
+}
+#cursor.shape-hollow,
+.unfocused #cursor.shape-block {
+  background: none;
+  color: transparent;
+  outline: 1px solid var(--cursor);
+  outline-offset: -1px;
+}
+#cursor.blink {
+  animation: blink 1.1s steps(1) infinite;
+}
+.unfocused #cursor {
+  animation: none;
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Off-screen-ish textarea that receives keyboard and IME input at the cursor. */
+#input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  padding: 0;
+  border: 0;
+  margin: 0;
+  opacity: 0;
+  resize: none;
+  overflow: hidden;
+  /* Not nowrap: WebKit then types spaces as U+00A0 (no-break space), which shells
+     treat as part of a word. */
+  white-space: pre;
+  font-size: var(--font-size);
+  caret-color: transparent;
+}
+
+#terminal.bell {
+  animation: bell 0.2s ease-out;
+}
+@keyframes bell {
+  from {
+    box-shadow: inset 0 0 0 9999px color-mix(in srgb, var(--fg) 8%, transparent);
+  }
+}
+
+/* ---- cards ---------------------------------------------------------------- */
+
+#cards {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 24px;
+  pointer-events: auto;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  cursor: auto;
+  user-select: text;
+  -webkit-user-select: text;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.card.bare {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.card.bare > header {
+  display: none;
+}
+.card.error {
+  border-color: color-mix(in srgb, var(--error) 55%, transparent);
+}
+
+.card > header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 22px;
+  padding: 0 4px 0 10px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--fg) 65%, transparent);
+  border-bottom: 1px solid var(--card-border);
+  text-transform: lowercase;
+  letter-spacing: 0.02em;
+}
+.card-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-close {
+  border: 0;
+  background: none;
+  color: inherit;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.card-close:hover {
+  background: color-mix(in srgb, var(--fg) 12%, transparent);
+}
+
+.card-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+.card:not(.fixed-height) .card-body {
+  overflow: auto;
+}
+/* Frameless cards sit inside an editor's layout (e.g. notebook cells): they
+   still scroll with the wheel when content outgrows their rows, but without a
+   scrollbar drawn over the cell. */
+.card.bare .card-body {
+  scrollbar-width: none;
+}
+.card.bare .card-body::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---- toasts -------------------------------------------------------------------- */
+
+#toasts {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 20;
+  max-width: min(420px, 80vw);
+}
+.toast {
+  padding: 7px 12px;
+  border-radius: 6px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  animation: toast-in 0.15s ease-out;
+}
+.toast.error {
+  border-color: color-mix(in srgb, var(--error) 55%, transparent);
+}
+@keyframes toast-in {
+  from {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+}
+
+/* ---- profiler (toggle_profiler) ------------------------------------------------ */
+
+#profiler {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 30;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--bg-solid) 92%, transparent);
+  color: var(--fg);
+  box-shadow: var(--shadow);
+  font: 11px/1.45 var(--font-family);
+  white-space: pre;
+  pointer-events: none;
+}

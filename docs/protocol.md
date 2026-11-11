@@ -95,7 +95,7 @@ card() {  # card KIND FILE
 }
 ```
 
-`tersh-show` (in `crates/tersh-show`) does this properly, including kind
+`tersh-show` (in `backend/show`) does this properly, including kind
 detection, images, video and tmux. `tersh-show --pane FILE` covers the current
 tmux pane with the card.
 

@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = ["domain", "application", "adapters", "show", "desktop"]
+default-members = ["domain", "application", "adapters", "show"]
+
+[workspace.package]
+edition = "2021"
+version = "0.6.0"
+license = "MIT"
+
+# The crates depend on each other by name; their folders are named once, here,
+# relative to the workspace root.
+[workspace.dependencies]
+tersh-domain = { path = "domain" }
+tersh-app = { path = "application" }
+tersh-adapters = { path = "adapters" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

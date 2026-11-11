@@ -1,19 +1,21 @@
 # Rust
-/target
+target/
 **/*.rs.bk
 *.pdb
 
 # Frontend
 node_modules/
-/dist
+frontend/dist/
 .vite/
+.angular/
 *.tsbuildinfo
 coverage/
+frontend/packages/cards/dist/
 
 # Tauri (generated schemas, bundles, mobile projects)
-src-tauri/gen
-src-tauri/target
-
+backend/desktop/gen
+# Copied from the repository root by backend/desktop/build.rs for the installers.
+backend/desktop/THIRD-PARTY.txt
 # Release artifacts built locally
 *.AppImage
 *.deb
@@ -50,4 +52,3 @@ Thumbs.db
 
 # Local tool state
 .claude/
-/packages/cards/dist

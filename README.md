@@ -76,16 +76,25 @@ copy `completions/tersh.yaml` there manually.
 
 ## Building from source
 
+The repository has two halves: `backend/` is the Rust workspace (the terminal
+core, its adapters, the desktop app and `tersh-show`) and `frontend/` is the
+page, an Angular shell around a canvas renderer. [just](https://just.systems)
+drives both. The frontend needs only [pnpm](https://pnpm.io) (12 or later;
+its standalone install needs no Node.js): `pnpm install` also fetches the
+pinned [bun](https://bun.sh), which runs the Angular compiler, Vite, Prettier,
+the Tauri CLI and the tests (`bun test`). No Node.js is involved.
+
 ```sh
-npm install
-npm run tauri dev        # or: npm run tauri build
+just setup               # pnpm install + cargo fetch
+just dev                 # or: just build
+just                     # every recipe, including clean, outdated, audit, version
 ```
 
 Linux needs the WebKitGTK development packages. `scripts/setup-linux.sh`
 installs them (dnf, apt or pacman); with `--toolbox` it sets up a Fedora
 toolbox instead, for immutable systems or when you'd rather not install them on
 the host, and prints how to build inside it. Install `tersh-show` with
-`cargo install --path crates/tersh-show`.
+`cargo install --path backend/show`.
 
 ### Profiling and memory
 
@@ -109,7 +118,7 @@ is full.
 `cargo test -p tersh-adapters --test memory` checks for leaks: the heap stays
 flat while scrollback churns, and returns to its baseline after many sessions
 are opened and closed, even when the program ignores the hang-up and keeps
-running. `src/__tests__/memory.test.ts` does the same for cards,
+running. `frontend/src/__tests__/memory.test.ts` does the same for cards,
 listeners and the profiler in the page.
 
 ## Configuration
@@ -300,7 +309,7 @@ example to show cell outputs under code. See [docs/neovim.md](docs/neovim.md).
 
 Other programs can use the cards too: Neovim plugins through the Lua API, web
 servers and any language through `tersh-show --serve` (HTTP), and web pages
-through [`@tersh/cards`](packages/cards), the renderers as a standalone
+through [`@tersh/cards`](frontend/packages/cards), the renderers as a standalone
 package. See [docs/building-on-tersh.md](docs/building-on-tersh.md), and
 [`examples/demos`](examples/demos) for a video in a tmux pane and a notebook
 in Neovim.
@@ -321,27 +330,33 @@ set -ga update-environment " TERSH_SOCKET"   # use the faster socket in new pane
 and Windows. It is the checklist the cross-platform test suite is built from.
 
 The code uses a hexagonal (ports and adapters) layout: a pure domain
-(`crates/tersh-domain`, `src/domain`), use cases and ports
-(`crates/tersh-app`, `src/ports`), and adapters for the PTY, emulator, socket,
-filesystem and Tauri (`crates/tersh-adapters`, `src/adapters`, `src-tauri`).
+(`backend/domain`, `frontend/src/domain`), use cases and ports
+(`backend/application`, `frontend/src/ports`), and adapters for the PTY, emulator, socket,
+filesystem, Angular and Tauri (`backend/adapters`, `frontend/src/adapters`, `backend/desktop`).
+Each side picks its adapters in one place (`backend/desktop/src/compose.rs`,
+`frontend/src/providers.ts`), so any of them can be swapped.
 See [docs/architecture.md](docs/architecture.md).
 
 ```sh
-npm test && npm run typecheck                          # frontend, including the layering check
-cargo test                                             # domain, use cases (with fakes), adapters, tersh-show
-nvim --headless -u NONE -l editors/nvim/tests/run.lua  # Neovim plugin
+just check          # typecheck, all tests (page, Rust, Neovim plugin), Prettier and clippy
+just clean          # remove build output; `just distclean` also drops node_modules
 ```
 
 ## Credits
 
 tersh is built on the work of these projects. Thank you to their authors and
-contributors.
+contributors. [Alacritty](https://github.com/alacritty/alacritty),
+[Tauri](https://tauri.app), [Angular](https://angular.dev) and
+[kitty](https://sw.kovidgoyal.net/kitty/) are its major inspirations; kitty
+contributes no code, but tersh speaks its keyboard protocol and borrows its
+idea of a terminal that shows more than text.
 
 | Component                                                                                                                | Used for                                                      | License                             |
 | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------- | ----------------------------------- |
 | [alacritty_terminal](https://github.com/alacritty/alacritty) and [vte](https://github.com/alacritty/vte)                 | Terminal emulation: escape-sequence parsing, grid, scrollback | Apache-2.0 (vte: Apache-2.0 or MIT) |
 | [portable-pty](https://github.com/wezterm/wezterm) from WezTerm                                                          | Pseudo-terminals on Linux, macOS and Windows                  | MIT                                 |
 | [Tauri](https://github.com/tauri-apps/tauri)                                                                             | The desktop window, webview and IPC                           | Apache-2.0 or MIT                   |
+| [Angular](https://github.com/angular/angular)                                                                            | The page's shell and dependency injection                     | MIT                                 |
 | [Sono](https://github.com/sursly/sono) by the Sono Project Authors, via [Fontsource](https://fontsource.org)             | The bundled default font                                      | SIL OFL 1.1                         |
 | [marked](https://github.com/markedjs/marked)                                                                             | Markdown cards                                                | MIT                                 |
 | [KaTeX](https://github.com/KaTeX/KaTeX) with [marked-katex-extension](https://github.com/UziTech/marked-katex-extension) | Maths in cards                                                | MIT                                 |
@@ -351,5 +366,5 @@ contributors.
 
 tersh also uses [serde](https://serde.rs), [toml](https://github.com/toml-rs/toml),
 [anyhow](https://github.com/dtolnay/anyhow) and other crates and npm packages
-listed in `Cargo.lock` and `package-lock.json`, each under its own license.
-tersh itself is [MIT licensed](LICENSE).
+listed in `backend/Cargo.lock` and `frontend/pnpm-lock.yaml`, each under its own license.
+tersh itself is [MIT licensed](LICENSE.txt); third-party notices are in [THIRD-PARTY.txt](THIRD-PARTY.txt).

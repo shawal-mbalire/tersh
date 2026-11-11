@@ -9,7 +9,7 @@ Until then, check it by hand before a release.
 🧪 expected to work, not yet verified · ⚠️ known issue (see notes) ·
 — not applicable.
 
-**Automated by:** `vitest` = `npm test` (`src/__tests__`, `packages/cards/test`);
+**Automated by:** `bun` = `bun test` via `just frontend-test` (`frontend/src/__tests__`, `frontend/packages/cards/test`);
 `cargo` = `cargo test` (crate named); `nvim` =
 `editors/nvim/tests/run.lua`; `install.yml` = the installer workflow on all
 three OSes; `ci desktop` = the Tauri build and clippy on Linux.
@@ -60,7 +60,7 @@ three OSes; `ci desktop` = the Tauri build and clippy on Linux.
 | TERM-07 | Scrollback (`scrollback` lines); mouse wheel and Shift+PageUp/PageDown                                      | `seq 5000`, then scroll up                                                        |  ✅   |  🧪   |   🧪    |                            |
 | TERM-08 | Mouse reporting for programs (tmux, vim `mouse=a`, htop)                                                    | Click and scroll in htop and in tmux panes                                        |  ✅   |  🧪   |   🧪    |                            |
 | TERM-09 | Text selection and copy; middle-click paste                                                                 | Select with the mouse, copy, paste elsewhere                                      |  ✅   |  🧪   |   🧪    |                            |
-| TERM-10 | Bracketed paste                                                                                             | Paste multiple lines into bash/zsh: they aren't executed                          |  ✅   |  🧪   |   🧪    | vitest (input)             |
+| TERM-10 | Bracketed paste                                                                                             | Paste multiple lines into bash/zsh: they aren't executed                          |  ✅   |  🧪   |   🧪    | bun (input)                |
 | TERM-11 | Focus in/out events                                                                                         | vim `autoread`, tmux `focus-events`                                               |  ✅   |  🧪   |   🧪    |                            |
 | TERM-12 | IME input (CJK, accents) with the candidate window at the cursor                                            | Type with an input method                                                         |  🧪   |  🧪   |   🧪    |                            |
 | TERM-13 | OSC 52 clipboard (e.g. from tmux or Neovim over ssh)                                                        | `printf '\e]52;c;%s\a' "$(printf hi \| base64)"`, then paste                      |  ✅   |  🧪   |   🧪    |                            |
@@ -68,33 +68,33 @@ three OSes; `ci desktop` = the Tauri build and clippy on Linux.
 | TERM-15 | Resize reflows and resizes the PTY (`stty size` follows)                                                    | Resize the window; `stty size`                                                    |  ✅   |  🧪   |   🧪    |                            |
 | TERM-16 | Keystroke latency: echo is never delayed; heavy output is coalesced to the paint rate                       | Type while `yes` runs in another pane                                             |  ✅   |  🧪   |   🧪    |                            |
 | TERM-17 | Input is written in order on its own thread: a huge paste never freezes the window                          | Paste 10 MB into `sleep 60`; the window stays responsive                          |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes) |
-| TERM-18 | Kitty keyboard protocol for programs that ask: Shift/Ctrl/Alt+Enter, Esc, Tab reach Neovim as distinct keys | In Neovim, `:map <S-CR>` something, press Shift-Enter                             |  ✅   |  🧪   |   🧪    | vitest (input)             |
+| TERM-18 | Kitty keyboard protocol for programs that ask: Shift/Ctrl/Alt+Enter, Esc, Tab reach Neovim as distinct keys | In Neovim, `:map <S-CR>` something, press Shift-Enter                             |  ✅   |  🧪   |   🧪    | bun (input)                |
 
 ## Rendering (REN)
 
-| ID     | Feature                                                                               | How to check                                                           | Linux | macOS | Windows | Automated by      |
-| ------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | :---: | :---: | :-----: | ----------------- |
-| REN-01 | Bundled Sono font (default) and any `font.family`                                     | Change `font.family`; it applies live                                  |  ✅   |  🧪   |   🧪    | vitest (fonts)    |
-| REN-02 | Nerd Font icons with any font (bundled symbols)                                       | `echo '        '`                                                      |  ✅   |  🧪   |   🧪    | vitest (fonts)    |
-| REN-03 | Powerline separators and block elements fill the cell at any `line_height`            | tmux catppuccin status bar: rounded caps are solid; `printf '█▀▄▌▐'`   |  ✅   |  🧪   |   🧪    |                   |
-| REN-04 | Zoom in, out and reset                                                                | Ctrl/Cmd + `=` / `-` / `0`                                             |  ✅   |  🧪   |   🧪    |                   |
-| REN-05 | Cursor shapes (block, beam, underline), blink, and changes from programs (DECSCUSR)   | `printf '\e[6 q'` gives a beam                                         |  ✅   |  🧪   |   🧪    |                   |
-| REN-06 | Wide characters and emoji take two cells                                              | `echo '漢字 👍'`                                                       |  ✅   |  🧪   |   🧪    |                   |
-| REN-07 | Only changed rows repaint; a full-screen `cat` of a large file stays smooth           | `cat` a 50 MB log                                                      |  ✅   |  🧪   |   🧪    |                   |
-| REN-08 | Text stays on the cell grid even when the font's letters differ in width (Sono's `i`) | In Claude Code, type a long line: the cursor sits right after the text |  ✅   |  🧪   |   🧪    | vitest (renderer) |
+| ID     | Feature                                                                               | How to check                                                           | Linux | macOS | Windows | Automated by   |
+| ------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | :---: | :---: | :-----: | -------------- |
+| REN-01 | Bundled Sono font (default) and any `font.family`                                     | Change `font.family`; it applies live                                  |  ✅   |  🧪   |   🧪    | bun (fonts)    |
+| REN-02 | Nerd Font icons with any font (bundled symbols)                                       | `echo '        '`                                                      |  ✅   |  🧪   |   🧪    | bun (fonts)    |
+| REN-03 | Powerline separators and block elements fill the cell at any `line_height`            | tmux catppuccin status bar: rounded caps are solid; `printf '█▀▄▌▐'`   |  ✅   |  🧪   |   🧪    |                |
+| REN-04 | Zoom in, out and reset                                                                | Ctrl/Cmd + `=` / `-` / `0`                                             |  ✅   |  🧪   |   🧪    |                |
+| REN-05 | Cursor shapes (block, beam, underline), blink, and changes from programs (DECSCUSR)   | `printf '\e[6 q'` gives a beam                                         |  ✅   |  🧪   |   🧪    |                |
+| REN-06 | Wide characters and emoji take two cells                                              | `echo '漢字 👍'`                                                       |  ✅   |  🧪   |   🧪    |                |
+| REN-07 | Only changed rows repaint; a full-screen `cat` of a large file stays smooth           | `cat` a 50 MB log                                                      |  ✅   |  🧪   |   🧪    |                |
+| REN-08 | Text stays on the cell grid even when the font's letters differ in width (Sono's `i`) | In Claude Code, type a long line: the cursor sits right after the text |  ✅   |  🧪   |   🧪    | bun (renderer) |
 
 ## Performance and memory (PERF)
 
-| ID      | Feature                                                                                                        | How to check                                                               | Linux | macOS | Windows | Automated by                    |
-| ------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | :---: | :---: | :-----: | ------------------------------- |
-| PERF-01 | Profiler overlay (`toggle_profiler`, Ctrl+Shift+P): paint time, key-to-screen latency, frames, memory          | Press it, type, run `seq 100000`                                           |  ✅   |  🧪   |   🧪    | vitest (profile)                |
-| PERF-02 | Session counters over the socket: `{"op":"stats"}`; `tersh.profile()` for plugins                              | `printf '{"op":"stats"}\n' \| socat - UNIX:$TERSH_SOCKET`                  |  ✅   |  🧪   |    —    | cargo (session_with_fakes)      |
-| PERF-03 | Frames that change nothing are not sent to the page                                                            | Profiler: "unchanged" counts up while a program redraws the same screen    |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes)      |
-| PERF-04 | No leaks: heap is flat with full scrollback; closed sessions free everything, even if the shell ignores SIGHUP | `cargo test -p tersh-adapters --test memory`                               |  ✅   |  🧪   |   🧪    | cargo (memory), vitest (memory) |
-| PERF-05 | Replay a recording through the emulator to time parsing and frame building                                     | `cargo run --release -p tersh-adapters --example replay -- out.raw 120 40` |  ✅   |  🧪   |   🧪    |                                 |
-| PERF-06 | Output parses near the emulator's own speed even with full scrollback                                          | Fill the scrollback, then `cat` a 50 MB log; or run the `replay` example   |  ✅   |  🧪   |   🧪    | cargo (tersh-adapters scroll)   |
-| PERF-07 | One frame in flight: the page is never sent frames faster than it paints them                                  | Profiler while `seq 1500000` runs: frames/s stays near the display rate    |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes)      |
-| PERF-08 | Typing and scrolling never wait for output parsing                                                             | Type while `seq 4000000` runs: keys echo without stutter                   |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes)      |
+| ID      | Feature                                                                                                        | How to check                                                               | Linux | macOS | Windows | Automated by                  |
+| ------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- | :---: | :---: | :-----: | ----------------------------- |
+| PERF-01 | Profiler overlay (`toggle_profiler`, Ctrl+Shift+P): paint time, key-to-screen latency, frames, memory          | Press it, type, run `seq 100000`                                           |  ✅   |  🧪   |   🧪    | bun (profile)                 |
+| PERF-02 | Session counters over the socket: `{"op":"stats"}`; `tersh.profile()` for plugins                              | `printf '{"op":"stats"}\n' \| socat - UNIX:$TERSH_SOCKET`                  |  ✅   |  🧪   |    —    | cargo (session_with_fakes)    |
+| PERF-03 | Frames that change nothing are not sent to the page                                                            | Profiler: "unchanged" counts up while a program redraws the same screen    |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes)    |
+| PERF-04 | No leaks: heap is flat with full scrollback; closed sessions free everything, even if the shell ignores SIGHUP | `cargo test -p tersh-adapters --test memory`                               |  ✅   |  🧪   |   🧪    | cargo (memory), bun (memory)  |
+| PERF-05 | Replay a recording through the emulator to time parsing and frame building                                     | `cargo run --release -p tersh-adapters --example replay -- out.raw 120 40` |  ✅   |  🧪   |   🧪    |                               |
+| PERF-06 | Output parses near the emulator's own speed even with full scrollback                                          | Fill the scrollback, then `cat` a 50 MB log; or run the `replay` example   |  ✅   |  🧪   |   🧪    | cargo (tersh-adapters scroll) |
+| PERF-07 | One frame in flight: the page is never sent frames faster than it paints them                                  | Profiler while `seq 1500000` runs: frames/s stays near the display rate    |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes)    |
+| PERF-08 | Typing and scrolling never wait for output parsing                                                             | Type while `seq 4000000` runs: keys echo without stutter                   |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes)    |
 
 ## Configuration and themes (CONF)
 
@@ -105,7 +105,7 @@ three OSes; `ci desktop` = the Tauri build and clippy on Linux.
 | CONF-03 | Mistakes (unknown key, bad colour, unknown theme) show as a notification                     | Add `fnt = 1`; a toast names it                                    |  ✅   |  🧪   |   🧪    | cargo (tersh-domain)       |
 | CONF-04 | 24 built-in themes with forgiving names; `[theme]` overrides; `themes/NAME.toml`             | `theme = "tokyonight"`, then a custom theme file                   |  ✅   |  🧪   |   🧪    | cargo (tersh-domain theme) |
 | CONF-05 | `[env]` variables for the shell (they win over everything else)                              | `[env] FOO = "1"`; `echo $FOO` in a new window                     |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes) |
-| CONF-06 | Keybindings: defaults, overrides, `"none"`, `{ send = "…" }`                                 | Bind `ctrl+shift+g = { send = "git status\r" }`                    |  ✅   |  🧪   |   🧪    | vitest (input)             |
+| CONF-06 | Keybindings: defaults, overrides, `"none"`, `{ send = "…" }`                                 | Bind `ctrl+shift+g = { send = "git status\r" }`                    |  ✅   |  🧪   |   🧪    | bun (input)                |
 | CONF-07 | Actions: copy, paste, zoom, scroll, `clear_cards`, `reload_config`, `open_config`, `restart` | Use each default binding (Cmd on macOS, Ctrl/Ctrl+Shift elsewhere) |  ✅   |  🧪   |   🧪    |                            |
 | CONF-08 | `open_config` opens the file in the system editor                                            | Ctrl/Cmd + `,`                                                     |  ✅   |  🧪   |   🧪    |                            |
 
@@ -116,13 +116,13 @@ three OSes; `ci desktop` = the Tauri build and clippy on Linux.
 | CARD-01 | Cards from program output (`OSC 7701`), JSON or base64                                   | The shell example in docs/protocol.md                   |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes) |
 | CARD-02 | Cards over `$TERSH_SOCKET` with a reply per line (Unix)                                  | `tersh-show` with the socket set                        |  ✅   |  🧪   |    —    | cargo (tersh-show e2e)     |
 | CARD-03 | `rich.osc = false` accepts cards only from the socket                                    | `cat` a file containing OSC 7701: no card               |  ✅   |  🧪   |   🧪    |                            |
-| CARD-04 | Kinds: text, json, markdown + KaTeX, image, video, svg, html, plotly, notebook, output   | `tersh-show` one file of each kind                      |  ✅   |  🧪   |   🧪    | vitest (cards)             |
+| CARD-04 | Kinds: text, json, markdown + KaTeX, image, video, svg, html, plotly, notebook, output   | `tersh-show` one file of each kind                      |  ✅   |  🧪   |   🧪    | bun (cards)                |
 | CARD-05 | Video plays (WebM everywhere; MP4/H.264 where the OS has the codec)                      | `tersh-show clip.webm`                                  |  🧪   |  🧪   |   🧪    |                            |
-| CARD-06 | Anchors: cursor (scrolls with output), cell (alt screen), float                          | One of each; scroll and open vim                        |  ✅   |  🧪   |   🧪    | vitest (cards)             |
+| CARD-06 | Anchors: cursor (scrolls with output), cell (alt screen), float                          | One of each; scroll and open vim                        |  ✅   |  🧪   |   🧪    | bun (cards)                |
 | CARD-07 | Ops: show, update, move, close, clear, info                                              | `tersh-show --id x`, then `-u --id x`, then `--close x` |  ✅   |  🧪   |   🧪    | cargo (session_with_fakes) |
 | CARD-08 | HTML cards are sandboxed: no terminal or IPC access, no network unless `html_network`    | An HTML card that calls `fetch` fails                   |  ✅   |  🧪   |   🧪    |                            |
 | CARD-09 | Cards use the theme (colours, fonts, light/dark)                                         | Switch the theme with a notebook open                   |  ✅   |  🧪   |   🧪    |                            |
-| CARD-10 | Alt-screen cards are removed when the program exits; cursor cards leave with the history | Quit vim with a card open                               |  ✅   |  🧪   |   🧪    | vitest (cards)             |
+| CARD-10 | Alt-screen cards are removed when the program exits; cursor cards leave with the history | Quit vim with a card open                               |  ✅   |  🧪   |   🧪    | bun (cards)                |
 
 ## tersh-show (SHOW)
 
@@ -159,12 +159,12 @@ three OSes; `ci desktop` = the Tauri build and clippy on Linux.
 
 ## Plugins and building on tersh (EXT)
 
-| ID     | Feature                                                                         | How to check                                            | Linux | macOS | Windows | Automated by           |
-| ------ | ------------------------------------------------------------------------------- | ------------------------------------------------------- | :---: | :---: | :-----: | ---------------------- |
-| EXT-01 | JavaScript plugins: renderers, actions, keybindings, events, styles; hot reload | `examples/plugins/csv.js` in `~/.config/tersh/plugins/` |  ✅   |  🧪   |   🧪    | vitest (plugins)       |
-| EXT-02 | `[plugins] disabled` turns a plugin off without deleting it                     | Disable `csv`                                           |  ✅   |  🧪   |   🧪    | vitest (plugins)       |
-| EXT-03 | `@tersh/cards` renders every kind in a plain web page                           | `npx vite packages/cards/example`                       |  ✅   |  🧪   |   🧪    | vitest (cards package) |
-| EXT-04 | Demos: video in a tmux pane, a notebook in Neovim                               | `examples/demos/*.sh`                                   |  ✅   |  🧪   |    —    |                        |
+| ID     | Feature                                                                         | How to check                                            | Linux | macOS | Windows | Automated by        |
+| ------ | ------------------------------------------------------------------------------- | ------------------------------------------------------- | :---: | :---: | :-----: | ------------------- |
+| EXT-01 | JavaScript plugins: renderers, actions, keybindings, events, styles; hot reload | `examples/plugins/csv.js` in `~/.config/tersh/plugins/` |  ✅   |  🧪   |   🧪    | bun (plugins)       |
+| EXT-02 | `[plugins] disabled` turns a plugin off without deleting it                     | Disable `csv`                                           |  ✅   |  🧪   |   🧪    | bun (plugins)       |
+| EXT-03 | `@tersh/cards` renders every kind in a plain web page                           | `just cards-example`                                    |  ✅   |  🧪   |   🧪    | bun (cards package) |
+| EXT-04 | Demos: video in a tmux pane, a notebook in Neovim                               | `examples/demos/*.sh`                                   |  ✅   |  🧪   |    —    |                     |
 
 ## Known issues
 

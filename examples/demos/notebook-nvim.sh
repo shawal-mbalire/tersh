@@ -9,7 +9,7 @@
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd)
-repo=$(cd "$here/../.." && pwd)
+repo=$(dirname "$(dirname "$here")") # examples/demos → examples → the repository
 notebook=${1:-$here/showcase.ipynb}
 
 exec nvim --clean \
