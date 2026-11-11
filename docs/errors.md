@@ -1,7 +1,7 @@
 # Error codes
 
 Every expected failure in tersh is an `AppError` with one of these codes
-(`crates/tersh-domain/src/error.rs`). Messages end with the code, for example
+(`backend/domain/src/error.rs`). Messages end with the code, for example
 `could not start zsh: No such file or directory (PTY-002)`, so a log line or
 an error in the window can be looked up here.
 

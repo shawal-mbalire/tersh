@@ -1,0 +1,11 @@
+# The page, plus @tersh/cards as a workspace package sharing this lockfile.
+packages:
+  - packages/*
+
+allowBuilds:
+  "@parcel/watcher": true
+  esbuild: true
+  lmdb: true
+  msgpackr-extract: true
+minimumReleaseAgeExclude:
+  - "@analogjs/vite-plugin-angular@2.9.7"

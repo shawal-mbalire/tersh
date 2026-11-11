@@ -66,7 +66,7 @@ own cursor doesn't move.
 
 ## Rendering cards in your own page
 
-[`packages/cards`](../packages/cards) is the code tersh renders cards with,
+[`packages/cards`](/frontend/packages/cards) is the code tersh renders cards with,
 as a standalone package: Jupyter notebooks and outputs, markdown with KaTeX,
 Plotly, sandboxed HTML, SVG, images, video, JSON and text.
 
@@ -81,4 +81,4 @@ card.dispose();
 
 A server can render notebooks for the browser this way, and a dev tool can
 show the same previews in a web UI and in the terminal. See the
-[package README](../packages/cards/README.md).
+[package README](/frontend/packages/cards/README.md).

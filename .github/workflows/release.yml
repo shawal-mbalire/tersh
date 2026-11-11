@@ -53,15 +53,24 @@ jobs:
         with:
           targets: ${{ startsWith(matrix.os, 'macos') && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
+          workspaces: backend
+      # pnpm installs the dependencies and the pinned bun that runs the frontend.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+          standalone: true
+      - run: pnpm install --frozen-lockfile
+        working-directory: frontend
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          # The Tauri app (backend/desktop) and its page (frontend) are siblings.
+          TAURI_APP_PATH: ${{ github.workspace }}/backend/desktop
+          TAURI_FRONTEND_PATH: ${{ github.workspace }}/frontend
         with:
+          projectPath: .
+          tauriScript: pnpm --dir frontend tauri
           releaseId: ${{ needs.create-release.outputs.id }}
           args: ${{ matrix.args }}
 
@@ -83,13 +92,16 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: backend
       - run: cargo build --release -p tersh-show --target ${{ matrix.target }}
+        working-directory: backend
       - name: Package and upload
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          dir=target/${{ matrix.target }}/release
+          dir=backend/target/${{ matrix.target }}/release
           if [ "${{ runner.os }}" = Windows ]; then
             asset=tersh-show-${{ matrix.name }}.zip
             (cd "$dir" && 7z a "$GITHUB_WORKSPACE/$asset" tersh-show.exe)

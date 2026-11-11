@@ -187,8 +187,11 @@ exec "$share/tersh/tersh.AppImage" "\$@"
 EOF
     install_bin "$tmp/tersh-wrapper" "tersh"
 
-    try_fetch "https://raw.githubusercontent.com/$REPO/$VERSION/src-tauri/icons/128x128.png" \
-      "$share/icons/hicolor/128x128/apps/tersh.png" || true
+    # The icon moved from src-tauri/ to backend/desktop/ in 0.7.0.
+    try_fetch "https://raw.githubusercontent.com/$REPO/$VERSION/backend/desktop/icons/128x128.png" \
+      "$share/icons/hicolor/128x128/apps/tersh.png" ||
+      try_fetch "https://raw.githubusercontent.com/$REPO/$VERSION/src-tauri/icons/128x128.png" \
+        "$share/icons/hicolor/128x128/apps/tersh.png" || true
     cat >"$share/applications/tersh.desktop" <<EOF
 [Desktop Entry]
 Type=Application

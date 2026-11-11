@@ -4,7 +4,7 @@
 #   scripts/setup-linux.sh             install the WebKitGTK/GTK development packages on this machine (sudo)
 #   scripts/setup-linux.sh --toolbox   set up a Fedora toolbox "tersh-dev" with them instead
 #
-# Rust (rustup) and Node.js are expected to be installed already.
+# Rust (rustup) and pnpm are expected to be installed already; pnpm installs the pinned bun.
 set -euo pipefail
 
 DNF_PACKAGES=(webkit2gtk4.1-devel libsoup3-devel gtk3-devel librsvg2-devel openssl-devel gcc gcc-c++ make pkgconf-pkg-config)
@@ -24,8 +24,8 @@ if [[ "${1:-}" == "--toolbox" ]]; then
 
 Done. Build and run inside the toolbox (your home directory is shared):
 
-  npm install && npx vite --port 1420 &        # on the host or in the toolbox
-  toolbox run -c $name bash -lc 'cd $(pwd) && cargo build -p tersh && ./target/debug/tersh'
+  just setup && just frontend-dev &              # on the host or in the toolbox
+  toolbox run -c $name bash -lc 'cd $(pwd)/backend && cargo build -p tersh && ./target/debug/tersh'
 
 or enter it with: toolbox enter $name
 EOF
@@ -42,4 +42,4 @@ else
   echo "Unknown package manager; install the WebKitGTK 4.1 and GTK 3 development packages yourself." >&2
   exit 1
 fi
-pkg-config --modversion webkit2gtk-4.1 >/dev/null && echo "WebKitGTK $(pkg-config --modversion webkit2gtk-4.1) is ready: npm install && npm run tauri dev"
+pkg-config --modversion webkit2gtk-4.1 >/dev/null && echo "WebKitGTK $(pkg-config --modversion webkit2gtk-4.1) is ready: just setup && just dev"

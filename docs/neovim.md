@@ -1,6 +1,6 @@
 # tersh.nvim
 
-The plugin in [`editors/nvim`](../editors/nvim) draws tersh cards in Neovim:
+The plugin in [`editors/nvim`](/editors/nvim) draws tersh cards in Neovim:
 
 - **Line cards** sit below a buffer line. They reserve blank virtual lines,
   so they never cover text, and follow the line through scrolling, inserted
@@ -109,7 +109,7 @@ do what they say.
 
 The kernel starts on the first run and stops when the buffer is closed or
 Neovim exits. tersh runs a small bridge,
-[`python/tersh_kernel.py`](../editors/nvim/python/tersh_kernel.py), with a
+[`python/tersh_kernel.py`](/editors/nvim/python/tersh_kernel.py), with a
 Python that has `jupyter_client`, and picks the kernel like this:
 
 1. the kernelspec named in the notebook's metadata, if it is installed;

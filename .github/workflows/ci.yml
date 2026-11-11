@@ -12,21 +12,25 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          workspaces: backend
+      # pnpm installs the dependencies and the pinned bun that runs the frontend.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+          standalone: true
       - uses: rhysd/action-setup-vim@v1
         with:
           neovim: true
           version: stable
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
-      - run: npx prettier --check .
-      # Core, tersh-show and the Neovim-in-a-PTY test (the Tauri crate needs WebKitGTK; see release.yml).
-      - run: cargo test
-      - run: nvim --headless -u NONE -l editors/nvim/tests/run.lua
+      - uses: extractions/setup-just@v2
+      - run: just setup
+      - run: just typecheck
+      - run: just format-check
+      - run: just third-party-check
+      # Page, core, tersh-show, the Neovim-in-a-PTY test and the Neovim plugin
+      # (the Tauri crate needs WebKitGTK; see the desktop job).
+      - run: just test
 
   desktop:
     # The Tauri crate (CLI, updates, window) needs WebKitGTK to build.
@@ -41,10 +45,14 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci && npm run build
-      - run: cargo clippy -p tersh --all-targets -- -D warnings
-      - run: cargo test -p tersh
+          workspaces: backend
+      # pnpm installs the dependencies and the pinned bun that runs the frontend.
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+          standalone: true
+      - uses: extractions/setup-just@v2
+      - run: just setup
+      - run: just clippy-desktop
+      - run: just desktop-test

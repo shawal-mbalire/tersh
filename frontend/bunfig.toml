@@ -1,0 +1,4 @@
+# bun runs the frontend's tests: `bun test` (or `just frontend-test`).
+[test]
+# A browser-like DOM (happy-dom) and CSS imports stubbed out, before any test file loads.
+preload = ["./test-setup.ts"]
