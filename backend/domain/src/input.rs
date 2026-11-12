@@ -51,9 +51,17 @@ pub struct KeyInput {
     /// `"keydown"` (default) or `"keyup"`.
     #[serde(rename = "type")]
     pub event_type: String,
+    /// The modifiers arrive under their DOM names (`ctrlKey`, ...), as the page
+    /// sends them; the short names are accepted too. With `#[serde(default)]` a
+    /// misspelled field is silently `false`, which once dropped every Ctrl and
+    /// Alt combination, so `deserializes_the_page_payload` pins the wire names.
+    #[serde(rename = "ctrlKey", alias = "ctrl")]
     pub ctrl: bool,
+    #[serde(rename = "altKey", alias = "alt")]
     pub alt: bool,
+    #[serde(rename = "shiftKey", alias = "shift")]
     pub shift: bool,
+    #[serde(rename = "metaKey", alias = "meta")]
     pub meta: bool,
 }
 
@@ -561,6 +569,23 @@ mod tests {
         let report_all = mode::DISAMBIGUATE_KEYS | mode::REPORT_ALL_KEYS_AS_ESC;
         assert_eq!(encode_key(&key("Enter"), report_all).as_deref(), Some("\x1b[13u"));
         assert_eq!(encode_key(&key("a"), report_all).as_deref(), Some("\x1b[97u"));
+    }
+
+    #[test]
+    fn deserializes_the_page_payload() {
+        // Exactly what frontend/src/adapters/tauri/backend.ts sends for Ctrl+Space.
+        let event: KeyInput = serde_json::from_str(
+            r#"{"key":" ","code":"Space","location":0,"ctrlKey":true,"altKey":false,
+                "shiftKey":false,"metaKey":false,"repeat":false,"type":"keydown"}"#,
+        )
+        .unwrap();
+        assert!(event.ctrl && !event.alt && !event.shift && !event.meta);
+        assert_eq!(encode_key(&event, 0).as_deref(), Some("\x00"), "tmux's C-Space prefix");
+
+        let alt_b: KeyInput = serde_json::from_str(r#"{"key":"b","code":"KeyB","altKey":true}"#).unwrap();
+        assert_eq!(encode_key(&alt_b, 0).as_deref(), Some("\x1bb"));
+        let short: KeyInput = serde_json::from_str(r#"{"key":"c","ctrl":true}"#).unwrap();
+        assert_eq!(encode_key(&short, 0).as_deref(), Some("\x03"));
     }
 
     #[test]
