@@ -74,6 +74,23 @@ complete in bash, zsh, fish, nushell and others. The installer drops it in
 `~/.config/carapace/specs/tersh.yaml` when you have carapace set up; otherwise
 copy `completions/tersh.yaml` there manually.
 
+### Troubleshooting: blank or invisible window on Linux
+
+tersh runs as a native Wayland client and uses WebKitGTK's DMA-BUF renderer.
+That works on current compositors (tested on Hyprland), including hiding and
+showing the window: tersh repaints whenever it is mapped again. Some GPU
+drivers still mishandle DMA-BUF, which shows up as a blank, black or invisible
+window. If that happens, turn the renderer off for tersh only:
+
+```sh
+WEBKIT_DISABLE_DMABUF_RENDERER=1 tersh
+```
+
+To make it stick, export the variable from your shell profile or your
+compositor's environment (e.g. `env = WEBKIT_DISABLE_DMABUF_RENDERER,1` in
+`hyprland.conf`) rather than editing `~/.local/bin/tersh`: the installer
+rewrites that launcher on every install and update.
+
 ## Building from source
 
 The repository has two halves: `backend/` is the Rust workspace (the terminal

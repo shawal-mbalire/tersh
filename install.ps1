@@ -144,7 +144,10 @@ return {
         Expand-Archive -Force $src $tmp
         Remove-Item -Recurse -Force $pack -ErrorAction SilentlyContinue
         New-Item -ItemType Directory -Force (Split-Path $pack) | Out-Null
-        Copy-Item -Recurse (Join-Path $tmp "tersh-$number\editors\nvim") $pack
+        # The plugin moved from editors/nvim to nvim/ after 0.6.1.
+        $plugin = Join-Path $tmp "tersh-$number\nvim"
+        if (-not (Test-Path $plugin)) { $plugin = Join-Path $tmp "tersh-$number\editors\nvim" }
+        Copy-Item -Recurse $plugin $pack
       }
     }
 
