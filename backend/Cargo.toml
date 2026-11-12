@@ -5,7 +5,7 @@ default-members = ["domain", "application", "adapters", "show"]
 
 [workspace.package]
 edition = "2021"
-version = "0.6.2"
+version = "0.6.3"
 license = "MIT"
 
 # The crates depend on each other by name; their folders are named once, here,
