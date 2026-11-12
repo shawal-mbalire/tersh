@@ -173,6 +173,14 @@ GTKEOF
       rm -rf "$share/tersh/app.old"
     fi
 
+    # The launcher is rewritten on every install. Older setups added
+    # WEBKIT_DISABLE_DMABUF_RENDERER to it by hand as a Wayland workaround; say
+    # so when that line goes, rather than dropping it silently.
+    if grep -q 'WEBKIT_DISABLE_DMABUF_RENDERER' "$BIN_DIR/tersh" 2>/dev/null; then
+      say "Dropping WEBKIT_DISABLE_DMABUF_RENDERER from the old launcher: the DMA-BUF renderer works on Wayland now."
+      say "If the window turns blank or invisible, set it in your environment instead (see Troubleshooting in the README)."
+    fi
+
     cat >"$tmp/tersh-wrapper" <<EOF
 #!/bin/sh
 export TERSH_WRAPPER="$BIN_DIR/tersh"
